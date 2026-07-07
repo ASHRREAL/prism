@@ -296,17 +296,11 @@ class PlayerHolder(
 
     /** Reshuffles the queue when repeat-all re-loops with shuffle on. */
     private fun reshuffleOnReplay() {
-        val s = _state.value
-        if (s.queue.size <= 1) return
-        val current = s.current ?: return
-        val rest = s.queue.filterNot { it.id == current.id }.shuffled()
-        val newQueue = listOf(current) + rest
-        _state.update { it.copy(queue = newQueue, currentIndex = 0, positionSec = 0f) }
-        if (!demoMode) {
-            player.setMediaItems(newQueue.map(::toMediaItem), 0, 0L)
-            player.playWhenReady = s.isPlaying
-        }
-        saveSession()
+        // Toggle shuffle off/on forces ExoPlayer to create a fresh shuffled order
+        // without rebuilding media items (which would briefly stop playback).
+        player.shuffleModeEnabled = false
+        player.shuffleModeEnabled = true
+        _state.update { it.copy(shuffle = true) }
     }
 
     fun setQueue(songs: List<Song>, startIndex: Int = 0, play: Boolean = true) {
