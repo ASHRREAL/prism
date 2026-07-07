@@ -272,7 +272,11 @@ fun NowPlayingScreen(
                             )
                             FloatingIcon(Icons.Rounded.SkipNext, "Next", onClick = viewModel::skipNext, size = 34.dp)
                             FloatingIcon(
-                                icon = if (state.repeat == RepeatMode.ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
+                                icon = when (state.repeat) {
+                                    RepeatMode.ALL -> Icons.Rounded.Repeat
+                                    RepeatMode.ONCE -> Icons.Rounded.RepeatOne
+                                    else -> Icons.Rounded.Repeat
+                                },
                                 contentDescription = "Repeat",
                                 onClick = viewModel::cycleRepeat,
                                 size = 30.dp,

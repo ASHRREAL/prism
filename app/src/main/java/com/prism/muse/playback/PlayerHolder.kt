@@ -32,7 +32,7 @@ data class PlaybackState(
     val current: Song? get() = queue.getOrNull(currentIndex)
 }
 
-enum class RepeatMode { OFF, ONE, ALL }
+enum class RepeatMode { OFF, ALL, ONCE }
 
 /** Key names for last-playback memory in SharedPreferences. */
 private const val PREFS_LAST_SONG = "last_song_data"
@@ -100,6 +100,7 @@ class PlayerHolder(
     private var originalQueue: List<Song> = emptyList()
     /** Whether the original queue was created from a shuffle-press action. */
     private var wasShuffled: Boolean = false
+    private var playlistCompletedCount = 0
 
     /**
      * Tries to restore the last playback session. Call once after construction.
@@ -190,11 +191,21 @@ class PlayerHolder(
                 val s = _state.value
                 val index = player.currentMediaItemIndex
 
-                // If we reached the end while shuffle+repeat-all is on, reshuffle.
+                // If shuffled + repeating (ALL mode), reshuffle when wrapping back to start
                 if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO &&
                     s.repeat == RepeatMode.ALL && s.shuffle && index == 0) {
                     reshuffleOnReplay()
                     return
+                }
+
+                // ONCE mode: stop after playlist finishes once
+                if (s.repeat == RepeatMode.ONCE && reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                    if (index == 0) playlistCompletedCount++
+                    if (playlistCompletedCount >= 1) {
+                        togglePlay()
+                        _state.update { it.copy(isPlaying = false) }
+                        return
+                    }
                 }
 
                 _state.update { it.copy(currentIndex = index, positionSec = 0f) }
@@ -375,15 +386,17 @@ class PlayerHolder(
     fun cycleRepeat() {
         val next = when (_state.value.repeat) {
             RepeatMode.OFF -> RepeatMode.ALL
-            RepeatMode.ALL -> RepeatMode.ONE
-            RepeatMode.ONE -> RepeatMode.OFF
+            RepeatMode.ALL -> RepeatMode.ONCE
+            RepeatMode.ONCE -> RepeatMode.OFF
         }
         _state.update { it.copy(repeat = next) }
         player.repeatMode = when (next) {
             RepeatMode.OFF -> Player.REPEAT_MODE_OFF
             RepeatMode.ALL -> Player.REPEAT_MODE_ALL
-            RepeatMode.ONE -> Player.REPEAT_MODE_ONE
+            RepeatMode.ONCE -> Player.REPEAT_MODE_OFF
         }
+        // Track playlist completion for ONCE mode
+        if (next == RepeatMode.ONCE) playlistCompletedCount = 0
     }
 
     fun setSpeed(speed: Float) {
