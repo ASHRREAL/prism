@@ -20,6 +20,13 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.URL
 
+data class DownloadProgress(
+    val songId: String,
+    val songTitle: String,
+    val progressPercent: Int,
+    val done: Boolean = false
+)
+
 /**
  * Single source of truth for the library. When a Navidrome server is
  * configured everything comes from Subsonic calls (cached in memory); with no
@@ -220,9 +227,19 @@ class LibraryRepository(
 
     // ---- Downloads ----
 
+    private val _downloadProgress = MutableStateFlow<Map<String, DownloadProgress>>(emptyMap())
+    val downloadProgress: StateFlow<Map<String, DownloadProgress>> = _downloadProgress
+    private val downloadJobs = HashMap<String, kotlinx.coroutines.Job>()
+
     fun localFile(songId: String): File = File(downloadDir, "$songId.audio")
 
     fun isDownloaded(songId: String): Boolean = localFile(songId).exists()
+
+    fun cancelDownload(songId: String) {
+        downloadJobs[songId]?.cancel()
+        downloadJobs.remove(songId)
+        _downloadProgress.value = _downloadProgress.value - songId
+    }
 
     /** Resolve the playable URI: local file when downloaded, stream otherwise. */
     fun playableUri(song: Song): String {
@@ -232,13 +249,36 @@ class LibraryRepository(
 
     suspend fun download(song: Song): Boolean = withContext(Dispatchers.IO) {
         if (song.streamUrl.isBlank()) return@withContext false
+        _downloadProgress.value = _downloadProgress.value + (song.id to DownloadProgress(song.id, song.title, 0))
+        val job = coroutineContext[kotlinx.coroutines.Job]
+        job?.let { downloadJobs[song.id] = it }
         runCatching {
             val tmp = File(downloadDir, "${song.id}.part")
-            URL(song.streamUrl).openStream().use { input ->
-                tmp.outputStream().use { output -> input.copyTo(output) }
+            val conn = URL(song.streamUrl).openConnection()
+            val total = conn.contentLengthLong
+            conn.getInputStream().use { input ->
+                tmp.outputStream().use { output ->
+                    val buffer = ByteArray(8192)
+                    var read = 0L
+                    var bytes: Int
+                    while (input.read(buffer).also { bytes = it } != -1) {
+                        output.write(buffer, 0, bytes)
+                        read += bytes
+                        if (total > 0) {
+                            val pct = ((read.toFloat() / total) * 100).toInt().coerceIn(0, 100)
+                            _downloadProgress.value = _downloadProgress.value +
+                                (song.id to DownloadProgress(song.id, song.title, pct))
+                        }
+                    }
+                }
             }
             tmp.renameTo(localFile(song.id))
-        }.isSuccess.also { if (it) refreshDownloads(song) }
+        }.isSuccess.also {
+            _downloadProgress.value = _downloadProgress.value +
+                (song.id to DownloadProgress(song.id, song.title, 100, done = true))
+            downloadJobs.remove(song.id)
+            if (it) refreshDownloads(song)
+        }
     }
 
     fun deleteDownload(songId: String) {

@@ -182,7 +182,7 @@ fun QueueScreen(viewModel: PlaybackViewModel, onBack: () -> Unit) {
                                                 val target = (i + dir).coerceIn(0, queueList.lastIndex)
                                                 if (target != i && target != safeCurrentIndex) {
                                                     queueList[i] = queueList[target].also { queueList[target] = queueList[i] }
-                                                    dragAccumY = 0f
+                                                    dragAccumY -= dir * rowHeightPx
                                                 }
                                             }
                                         }

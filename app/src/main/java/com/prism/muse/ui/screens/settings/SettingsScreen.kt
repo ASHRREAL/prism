@@ -366,7 +366,7 @@ fun SettingsScreen(
                                             val target = (i + dir).coerceIn(0, liveTabs.lastIndex)
                                             if (target != i) {
                                                 liveTabs[i] = liveTabs[target].also { liveTabs[target] = liveTabs[i] }
-                                                tabDragAccum = 0f
+                                                tabDragAccum -= dir * tabRowHeightPx
                                             }
                                         }
                                     }

@@ -13,10 +13,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -188,7 +190,7 @@ fun HomeHubScreen(
                         "artists" -> ArtistsPanel(artists, onArtistClick, bottomPad)
                         "playlists" -> PlaylistsPanel(playlists, onPlaylistClick, bottomPad)
                         "favorites" -> SongsPanel(favorites, playback.current?.id, accent, bottomPad, viewModel) { i -> playSongs(favorites, i) }
-                        "downloaded" -> SongsPanel(downloaded, playback.current?.id, accent, bottomPad, viewModel, emptyText = "no downloads yet") { i -> playSongs(downloaded, i) }
+                        "downloaded" -> DownloadsPanel(downloaded, library.downloadProgress.collectAsState().value, accent, bottomPad, viewModel) { i -> playSongs(downloaded, i) }
                         "genres" -> GenresPanel(genres.map { it.name to it.albumCount }, onGenreClick, bottomPad)
                         "all songs" -> AllSongsPanel(accent, bottomPad, onOpenAllSongs)
                     }
@@ -294,6 +296,68 @@ private fun GenresPanel(genres: List<Pair<String, Int>>, onGenreClick: (String) 
                 Text("$count", style = MaterialTheme.typography.bodyLarge, color = TextTertiary, modifier = Modifier.padding(bottom = 4.dp))
             }
             HairlineDivider()
+        }
+    }
+}
+
+@Composable
+private fun DownloadsPanel(
+    downloaded: List<Song>,
+    progress: Map<String, com.prism.muse.data.DownloadProgress>,
+    accent: Color,
+    bottomPad: Dp,
+    viewModel: com.prism.muse.playback.PlaybackViewModel?,
+    onPlay: (Int) -> Unit
+) {
+    val context = LocalContext.current
+    LazyColumn(contentPadding = PaddingValues(bottom = bottomPad)) {
+        // Show active downloads
+        val active = progress.values.filter { !it.done }
+        if (active.isNotEmpty()) {
+            item {
+                Text("downloading", style = MaterialTheme.typography.bodyMedium, color = TextTertiary,
+                    modifier = Modifier.padding(bottom = 8.dp))
+            }
+            items(active.toList(), key = { it.songId }) { p ->
+                Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Text(p.songTitle, style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp),
+                            color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f))
+                        Text("${p.progressPercent}%", style = MaterialTheme.typography.bodyMedium,
+                            color = accent)
+                        Text("cancel", style = MaterialTheme.typography.bodyMedium, color = TextTertiary,
+                            modifier = Modifier.clickable {
+                                PrismApp.graph(context).library.cancelDownload(p.songId)
+                            }.padding(start = 12.dp))
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    LinearProgressIndicator(
+                        progress = { p.progressPercent / 100f },
+                        modifier = Modifier.fillMaxWidth().height(3.dp),
+                        color = accent,
+                        trackColor = accent.copy(alpha = 0.15f)
+                    )
+                }
+            }
+            item { HairlineDivider(Modifier.padding(vertical = 8.dp)) }
+        }
+
+        // Show completed downloads
+        if (downloaded.isEmpty() && active.isEmpty()) {
+            item { Text("no downloads yet", style = MaterialTheme.typography.bodyLarge, color = TextTertiary) }
+        } else {
+            itemsIndexed(downloaded, key = { _, s -> s.id }) { index, song ->
+                if (viewModel != null) {
+                    SongRowWithMenu(song = song, viewModel = viewModel,
+                        onClick = { onPlay(index) },
+                        active = false, accent = accent)
+                } else {
+                    SongRow(song = song, onClick = { onPlay(index) },
+                        active = false, accent = accent)
+                }
+            }
         }
     }
 }
