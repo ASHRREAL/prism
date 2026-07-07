@@ -19,7 +19,16 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import com.prism.muse.data.mock.MockLibrary
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import com.prism.muse.PrismApp
+import com.prism.muse.data.model.Album
+import com.prism.muse.data.model.Artist
 import com.prism.muse.data.model.Playlist
 import com.prism.muse.playback.PlaybackViewModel
 import com.prism.muse.ui.screens.album.AlbumDetailScreen
@@ -80,7 +89,9 @@ fun PrismNavHost(
         }
         composable(Routes.ALBUM) { backStackEntry ->
             val albumId = backStackEntry.arguments?.getString("albumId") ?: return@composable
-            val album = runCatching { MockLibrary.albumById(albumId) }.getOrNull()
+            val library = PrismApp.graph(LocalContext.current).library
+            val albums by library.albums.collectAsState()
+            val album = albums.find { it.id == albumId }
             if (album != null) {
                 AlbumDetailScreen(
                     album = album,
@@ -115,7 +126,9 @@ fun PrismNavHost(
         }
         composable(Routes.ARTIST) { backStackEntry ->
             val artistId = backStackEntry.arguments?.getString("artistId") ?: return@composable
-            val artist = runCatching { MockLibrary.artistById(artistId) }.getOrNull()
+            val library = PrismApp.graph(LocalContext.current).library
+            val artists by library.artists.collectAsState()
+            val artist = artists.find { it.id == artistId }
             if (artist != null) {
                 ArtistDetailScreen(
                     artist = artist,

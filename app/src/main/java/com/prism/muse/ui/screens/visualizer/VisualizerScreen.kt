@@ -7,8 +7,10 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,7 +24,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -69,6 +74,8 @@ fun VisualizerScreen(
 
     // Beat-synced pulse
     val beat = remember(pos) { (1f + sin(pos * PI.toFloat() / 2f) * 0.3f).coerceIn(0.5f, 1.5f) }
+    var vizMode by remember { mutableIntStateOf(0) }
+    val modes = listOf("bars", "waves", "circles")
 
     PlayerBackdrop(artUrl = artUrl) {
         Column(
@@ -112,6 +119,14 @@ fun VisualizerScreen(
                 modifier = Modifier.padding(start = 22.dp, top = 2.dp, bottom = 6.dp)
             )
 
+            Row(Modifier.padding(start = 22.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(22.dp)) {
+                modes.forEachIndexed { i, name ->
+                    Text(name, style = SectionHeader.copy(fontSize = 18.sp),
+                        color = if (i == vizMode) accent else TextSecondary,
+                        modifier = Modifier.clickable { vizMode = i })
+                }
+            }
+
             // Main visualization canvas
             Canvas(
                 modifier = Modifier
@@ -123,66 +138,48 @@ fun VisualizerScreen(
                 val h = size.height
                 val centerY = h / 2
 
-                // Mirrored spectrum bars
-                val barCount = 48
-                val barWidth = w / barCount
-                val maxBarH = h * 0.8f
-
-                // Center glow circle with beat pulse
-                val glowR = 80f * beat
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(accent.copy(alpha = 0.15f), Color.Transparent),
-                        center = Offset(w / 2, centerY),
-                        radius = glowR * 2
-                    ),
-                    center = Offset(w / 2, centerY),
-                    radius = glowR * 2
-                )
-                drawCircle(
-                    color = accent.copy(alpha = 0.3f),
-                    radius = glowR,
-                    center = Offset(w / 2, centerY),
-                    style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
-                )
-
-                // Bars
-                for (i in 0 until barCount) {
-                    val x = i * barWidth + barWidth / 2
-                    // Create varied heights using sine waves at different phases
-                    val h1 = sin(i * 0.2f + phase1) * cos(i * 0.15f + phase2)
-                    val h2 = sin(i * 0.35f + phase3) * cos(i * 0.08f + phase4)
-                    val normalized = ((h1 + h2) / 2f + 1f) / 2f // 0..1
-                    val barH = normalized * maxBarH * beat
-
-                    // Top bar (mirror)
-                    drawLine(
-                        color = accent.copy(alpha = 0.7f),
-                        start = Offset(x, centerY),
-                        end = Offset(x, centerY - barH / 2),
-                        strokeWidth = (barWidth * 0.6f).coerceAtLeast(2.dp.toPx()),
-                        cap = StrokeCap.Round
-                    )
-                    // Bottom bar (mirror)
-                    drawLine(
-                        color = accent.copy(alpha = 0.4f),
-                        start = Offset(x, centerY),
-                        end = Offset(x, centerY + barH / 2),
-                        strokeWidth = (barWidth * 0.6f).coerceAtLeast(2.dp.toPx()),
-                        cap = StrokeCap.Round
-                    )
-                }
-
-                // Wavy line overlay
-                val wavePath = Path().apply {
-                    moveTo(0f, centerY)
-                    for (i in 0..100) {
-                        val x = w * i / 100f
-                        val y = centerY + sin(i * 0.3f + phase1) * 60f * beat + cos(i * 0.25f + phase3) * 30f
-                        lineTo(x, y)
+                when (vizMode) {
+                    0 -> { // Bars (mirrored)
+                        val barCount = 48
+                        val barWidth = w / barCount
+                        val glowR = 60f * beat
+                        drawCircle(Brush.radialGradient(listOf(accent.copy(alpha = 0.12f), Color.Transparent),
+                            center = Offset(w / 2, centerY)), center = Offset(w / 2, centerY), radius = glowR * 2)
+                        for (i in 0 until barCount) {
+                            val x = i * barWidth + barWidth / 2
+                            val h1 = sin(i * 0.2f + phase1) * cos(i * 0.15f + phase2)
+                            val h2 = sin(i * 0.35f + phase3) * cos(i * 0.08f + phase4)
+                            val nh = (((h1 + h2) / 2f + 1f) / 2f * h * 0.7f).coerceAtLeast(4f)
+                            drawLine(accent.copy(alpha = 0.6f), Offset(x, centerY), Offset(x, centerY - nh), (barWidth * 0.55f).coerceAtLeast(3f), StrokeCap.Round)
+                            drawLine(accent.copy(alpha = 0.3f), Offset(x, centerY), Offset(x, centerY + nh), (barWidth * 0.55f).coerceAtLeast(3f), StrokeCap.Round)
+                        }
+                    }
+                    1 -> { // Waves
+                        val path = Path()
+                        path.moveTo(0f, centerY + sin(phase1) * 40f)
+                        for (i in 0..100) {
+                            val x = w * i / 100f
+                            val y = centerY + sin(i * 0.15f + phase1) * 50f * beat + cos(i * 0.25f + phase3) * 25f
+                            path.lineTo(x, y)
+                        }
+                        drawPath(path, accent.copy(alpha = 0.5f), style = Stroke(3f, cap = StrokeCap.Round))
+                        val path2 = Path()
+                        path2.moveTo(0f, centerY + sin(phase2) * 30f)
+                        for (i in 0..100) {
+                            path2.lineTo(w * i / 100f, centerY + sin(i * 0.2f + phase2) * 35f + cos(i * 0.3f + phase4) * 20f)
+                        }
+                        drawPath(path2, accent.copy(alpha = 0.25f), style = Stroke(2f, cap = StrokeCap.Round))
+                    }
+                    2 -> { // Circles
+                        val rings = 6
+                        val maxR = minOf(w, h) * 0.35f
+                        for (r in rings downTo 1) {
+                            val rad = maxR * r / rings * (0.7f + 0.3f * sin(phase1 + r * 0.7f) * beat)
+                            drawCircle(accent.copy(alpha = 0.25f / r), rad, Offset(w / 2, centerY), style = Stroke(3f * r / rings, cap = StrokeCap.Round))
+                        }
+                        drawCircle(accent.copy(alpha = 0.5f * beat), 8f, Offset(w / 2, centerY))
                     }
                 }
-                drawPath(wavePath, color = accent.copy(alpha = 0.25f), style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round))
             }
 
             // Footer

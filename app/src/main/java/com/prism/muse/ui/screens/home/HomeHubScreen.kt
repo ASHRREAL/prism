@@ -1,9 +1,11 @@
 package com.prism.muse.ui.screens.home
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -11,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -31,8 +34,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -64,6 +70,7 @@ import com.prism.muse.ui.theme.SectionHeader
 import com.prism.muse.ui.theme.TextPrimary
 import com.prism.muse.ui.theme.TextSecondary
 import com.prism.muse.ui.theme.TextTertiary
+import com.prism.muse.ui.theme.VoidBlack
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -248,23 +255,15 @@ private fun ArtistsPanel(artists: List<Artist>, onArtistClick: (Artist) -> Unit,
 private fun PlaylistsPanel(playlists: List<Playlist>, onPlaylistClick: (Playlist) -> Unit, bottomPad: Dp) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    var deleteTarget by remember { mutableStateOf<Playlist?>(null) }
+
     LazyColumn(contentPadding = PaddingValues(bottom = bottomPad)) {
         items(playlists, key = { it.id }) { playlist ->
             Row(
-                Modifier
-                    .fillMaxWidth()
+                Modifier.fillMaxWidth()
                     .combinedClickable(
                         onClick = { onPlaylistClick(playlist) },
-                        onLongClick = {
-                            android.app.AlertDialog.Builder(context)
-                                .setTitle("Delete playlist?")
-                                .setMessage("Delete \"${playlist.name}\"?")
-                                .setPositiveButton("Delete") { _, _ ->
-                                    scope.launch { PrismApp.graph(context).library.deletePlaylist(playlist.id) }
-                                }
-                                .setNegativeButton("Cancel", null)
-                                .show()
-                        }
+                        onLongClick = { deleteTarget = playlist }
                     )
                     .padding(vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -276,6 +275,30 @@ private fun PlaylistsPanel(playlists: List<Playlist>, onPlaylistClick: (Playlist
                 }
             }
             HairlineDivider()
+        }
+    }
+
+    // Bottom sheet for delete confirmation
+    if (deleteTarget != null) {
+        Box(
+            Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)).clickable { deleteTarget = null },
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            Column(
+                Modifier.fillMaxWidth().background(VoidBlack).navigationBarsPadding().padding(24.dp)
+                    .clickable(enabled = false) { }
+            ) {
+                Text(deleteTarget!!.name, style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+                HairlineDivider(Modifier.padding(vertical = 12.dp))
+                Text("delete playlist", style = SectionHeader.copy(fontSize = 22.sp), color = Color(0xFFD32F2F),
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        val p = deleteTarget!!
+                        deleteTarget = null
+                        scope.launch { PrismApp.graph(context).library.deletePlaylist(p.id) }
+                    }.padding(vertical = 12.dp))
+                Text("cancel", style = SectionHeader.copy(fontSize = 22.sp), color = TextTertiary,
+                    modifier = Modifier.fillMaxWidth().clickable { deleteTarget = null }.padding(vertical = 12.dp))
+            }
         }
     }
 }
