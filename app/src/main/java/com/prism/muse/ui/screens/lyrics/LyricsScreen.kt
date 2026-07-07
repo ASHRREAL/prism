@@ -271,17 +271,19 @@ fun LyricsScreen(
                             // rows flash as a second "highlighted" line.
                             val targetScale = when {
                                 !active -> 1f
-                                lyricsStyle == "spotlight" -> 1.12f
-                                lyricsStyle == "fade" -> 1.04f
+                                lyricsStyle == "spotlight" -> 1.16f
+                                lyricsStyle == "fade" -> 1.03f
+                                lyricsStyle == "pulse" -> 1.08f
                                 lyricsStyle == "karaoke" -> 1f
                                 else -> 1f
                             }
                             val scale by animateFloatAsState(targetScale, tween(240), label = "lineScale")
                             val targetAlpha = when {
                                 active -> 1f
-                                lyricsStyle == "spotlight" -> (0.32f - distance * 0.06f).coerceIn(0.06f, 0.32f)
-                                lyricsStyle == "fade" -> 0.5f
-                                else -> 1f // karaoke: dim handled by text color
+                                lyricsStyle == "spotlight" -> (0.25f - distance * 0.07f).coerceIn(0.04f, 0.25f)
+                                lyricsStyle == "fade" -> 0.38f
+                                lyricsStyle == "pulse" -> 0.55f
+                                else -> 1f
                             }
                             val alpha by animateFloatAsState(targetAlpha, tween(220), label = "lineAlpha")
 
@@ -342,7 +344,7 @@ fun LyricsScreen(
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                val styleOrder = listOf("karaoke", "fade", "spotlight")
+                val styleOrder = listOf("karaoke", "fade", "spotlight", "pulse")
                 TextLinkRow(
                     links = listOf(
                         if (lyrics?.synced == true) "synced" else "unsynced",
