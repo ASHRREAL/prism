@@ -157,9 +157,10 @@ fun QueueScreen(viewModel: PlaybackViewModel, onBack: () -> Unit) {
                         })
                         SwipeToDismissBox(state = dismiss, enableDismissFromStartToEnd = false,
                             backgroundContent = {
+                                val fraction = dismiss.requireOffset().coerceIn(0f, 1f)
                                 Box(Modifier.fillMaxSize().background(
                                     Brush.horizontalGradient(
-                                        listOf(Color.Transparent, Color(0xFFD32F2F).copy(alpha = 0.6f), Color(0xFFD32F2F))
+                                        listOf(Color.Transparent, Color(0xFFD32F2F).copy(alpha = fraction * 0.8f), Color(0xFFD32F2F).copy(alpha = fraction))
                                     )
                                 ))
                             }
