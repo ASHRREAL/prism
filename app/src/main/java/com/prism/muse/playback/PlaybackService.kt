@@ -45,10 +45,7 @@ class PlaybackService : MediaSessionService() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         val player = mediaSession?.player
-        if (player?.playWhenReady == true) {
-            // Keep service alive for background playback
-            startForegroundService(Intent(this, PlaybackService::class.java))
-        } else {
+        if (player?.playWhenReady != true) {
             stopSelf()
         }
     }

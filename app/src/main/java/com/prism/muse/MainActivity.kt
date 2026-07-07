@@ -47,7 +47,9 @@ import com.prism.muse.ui.screens.login.LoginScreen
 import com.prism.muse.ui.screens.songlist.SongListDetailScreen
 import com.prism.muse.ui.theme.PrismMuseTheme
 import com.prism.muse.ui.theme.VoidBlack
+import com.prism.muse.ui.theme.ProvideAccent
 import com.prism.muse.ui.theme.accentColorByName
+import com.prism.muse.ui.components.seedColor
 import com.prism.muse.data.model.Song
 import kotlinx.coroutines.launch
 
@@ -87,12 +89,25 @@ private fun PrismApp(playbackViewModel: PlaybackViewModel) {
 
     val context = LocalContext.current
     val activity = context as? android.app.Activity
-    val graph = PrismApp.graph(context)
+        val graph = PrismApp.graph(context)
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         graph.player.restoreSession()
     }
+
+    val playbackState by playbackViewModel.state.collectAsState()
+    val dynamicAccent by graph.prefs.dynamicAccent.collectAsState()
+    val settingsAccentName by graph.prefs.accentColorName.collectAsState()
+
+    // App-wide accent: dynamic from art when enabled, else settings accent
+    val appAccent = if (dynamicAccent && playbackState.current != null) {
+        seedColor(playbackState.current!!.artUrl)
+    } else {
+        accentColorByName(settingsAccentName)
+    }
+
+    ProvideAccent(appAccent) {
 
     BackHandler(enabled = true) {
         when {
@@ -126,7 +141,7 @@ private fun PrismApp(playbackViewModel: PlaybackViewModel) {
         PrismNavHost(
             navController = navController,
             playbackViewModel = playbackViewModel,
-            contentPadding = PaddingValues(bottom = 64.dp),
+            contentPadding = PaddingValues(bottom = 72.dp),
             onOpenNowPlaying = { nowPlayingOpen = true },
             onOpenSettings = { settingsOpen = true },
             onOpenPlaylist = { playlist ->
@@ -295,6 +310,7 @@ private fun PrismApp(playbackViewModel: PlaybackViewModel) {
         // App-level song actions sheet (add to playlist / queue / like …).
         SongActionsHost(playbackViewModel)
     }
+    } // Close ProvideAccent
 }
 
 /**

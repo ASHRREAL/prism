@@ -81,8 +81,8 @@ object MockLibrary {
     val favorites: List<Song> = songs.filter { it.isFavorite }
     val downloaded: List<Song> = songs.filter { it.isDownloaded }
 
-    fun albumById(id: String) = albums.first { it.id == id }
+    fun albumById(id: String) = albums.firstOrNull { it.id == id }
     fun songsForAlbum(albumId: String) = songs.filter { it.albumId == albumId }.sortedBy { it.trackNumber }
-    fun artistById(id: String) = artists.first { it.id == id }
+    fun artistById(id: String) = artists.firstOrNull { it.id == id }
     fun albumsForArtist(artistName: String) = albums.filter { it.artist == artistName }
 }

@@ -250,13 +250,8 @@ fun LyricsScreen(
                                 val end = current.lines.getOrNull(index + 1)?.timeMs ?: (start + 3000L)
                                 val raw = if (end > start)
                                     ((state.positionSec * 1000f - start) / (end - start)) else 1f
-                                // Faster animation for tighter timing tracking
-                                val p by animateFloatAsState(
-                                    raw.coerceIn(0f, 1f),
-                                    tween(200, easing = LinearEasing),
-                                    label = "wipe"
-                                )
-                                val a = p.coerceIn(0.0001f, 0.9999f)
+                                // Raw fraction for instant word-by-word tracking
+                                val a = raw.coerceIn(0f, 1f)
                                 val dim = TextSecondary.copy(alpha = 0.4f)
                                 val brush = Brush.horizontalGradient(
                                     colorStops = arrayOf(

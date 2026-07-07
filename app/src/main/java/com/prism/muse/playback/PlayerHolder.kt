@@ -367,7 +367,12 @@ class PlayerHolder(
 
     private fun startService() {
         runCatching {
-            context.startService(Intent(context, PlaybackService::class.java))
+            val intent = Intent(context, PlaybackService::class.java)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
         }
     }
 }

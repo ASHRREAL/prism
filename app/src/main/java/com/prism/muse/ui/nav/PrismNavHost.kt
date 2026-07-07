@@ -76,7 +76,7 @@ fun PrismNavHost(
         }
         composable(Routes.ALBUM) { backStackEntry ->
             val albumId = backStackEntry.arguments?.getString("albumId") ?: return@composable
-            val album = MockLibrary.albumById(albumId)
+            val album = runCatching { MockLibrary.albumById(albumId) }.getOrNull()
             if (album != null) {
                 AlbumDetailScreen(
                     album = album,
@@ -98,7 +98,7 @@ fun PrismNavHost(
         }
         composable(Routes.ARTIST) { backStackEntry ->
             val artistId = backStackEntry.arguments?.getString("artistId") ?: return@composable
-            val artist = MockLibrary.artistById(artistId)
+            val artist = runCatching { MockLibrary.artistById(artistId) }.getOrNull()
             if (artist != null) {
                 ArtistDetailScreen(
                     artist = artist,

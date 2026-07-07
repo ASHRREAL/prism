@@ -187,18 +187,7 @@ fun QueueScreen(
                             state = dismiss,
                             enableDismissFromStartToEnd = false,
                             backgroundContent = {
-                                val bg by animateColorAsState(
-                                    if (dismiss.targetValue == SwipeToDismissBoxValue.EndToStart) Color(0xFFB23A3A) else Color.Transparent,
-                                    label = "swipeBg"
-                                )
-                                Box(Modifier.fillMaxSize().background(bg), contentAlignment = Alignment.CenterEnd) {
-                                    Text(
-                                        "remove",
-                                        style = TrackedLabel.copy(fontSize = 12.sp, letterSpacing = 1.sp),
-                                        color = Color.White,
-                                        modifier = Modifier.padding(end = 28.dp)
-                                    )
-                                }
+                                Box(Modifier.fillMaxSize().background(Color(0xFFD32F2F)))
                             }
                         ) {
                             Box {

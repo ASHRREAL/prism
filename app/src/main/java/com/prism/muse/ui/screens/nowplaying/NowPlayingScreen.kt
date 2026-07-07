@@ -100,18 +100,10 @@ fun NowPlayingScreen(
     val graph = PrismApp.graph(LocalContext.current)
     val depthEffect by graph.prefs.depthEffect.collectAsState()
     val npBg by graph.prefs.npBackground.collectAsState()
-    val dynamicAccent by graph.prefs.dynamicAccent.collectAsState()
     val favorites by graph.library.favorites.collectAsState()
     val upNext = if (song != null) state.queue.drop(state.currentIndex + 1) else emptyList()
     var dragAccum by remember { mutableStateOf(0f) }
-
-    // Dynamic accent from album art
-    val dynamicAccentColor = if (dynamicAccent && song != null) {
-        seedColor(song.artUrl)
-    } else themeAccent
-
-    ProvideAccent(dynamicAccentColor) {
-        val accent = LocalPrismAccent.current
+    val accent = LocalPrismAccent.current
 
     Box(Modifier.fillMaxSize().background(VoidBlack)) {
         // Background based on preference
@@ -121,7 +113,7 @@ fun NowPlayingScreen(
                     Modifier.fillMaxSize().background(
                         Brush.radialGradient(
                             colors = listOf(
-                                dynamicAccentColor.copy(alpha = 0.3f),
+                                accent.copy(alpha = 0.3f),
                                 InkNavy.copy(alpha = 0.7f),
                                 VoidBlack
                             ),
@@ -132,7 +124,7 @@ fun NowPlayingScreen(
                 )
             }
             "waves" -> {
-                WaveBackground(accent = dynamicAccentColor, drift = 0f) {}
+                WaveBackground(accent = accent, drift = 0f) {}
             }
             "solid" -> {
                 // Just void black - gradient overlay handles it
@@ -365,8 +357,7 @@ fun NowPlayingScreen(
                 )
             }
         }
-    } // Close outer Box
-    } // Close ProvideAccent
+    }
 }
 
 @Composable
