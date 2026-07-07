@@ -53,6 +53,18 @@ class AppPrefs(context: Context) {
     private val _eqEnabled = MutableStateFlow(prefs.getBoolean("eq_enabled", true))
     val eqEnabled: StateFlow<Boolean> = _eqEnabled
 
+    private val _bassBoostOn = MutableStateFlow(prefs.getBoolean("bass_boost_on", false))
+    val bassBoostOn: StateFlow<Boolean> = _bassBoostOn
+    fun setBassBoostOn(value: Boolean) = putBool("bass_boost_on", value, _bassBoostOn)
+
+    private val _virtualizerOn = MutableStateFlow(prefs.getBoolean("virtualizer_on", false))
+    val virtualizerOn: StateFlow<Boolean> = _virtualizerOn
+    fun setVirtualizerOn(value: Boolean) = putBool("virtualizer_on", value, _virtualizerOn)
+
+    private val _loudnessOn = MutableStateFlow(prefs.getBoolean("loudness_on", false))
+    val loudnessOn: StateFlow<Boolean> = _loudnessOn
+    fun setLoudnessOn(value: Boolean) = putBool("loudness_on", value, _loudnessOn)
+
     /** Now Playing background style: blurred, gradient, waves, solid. */
     private val _npBackground = MutableStateFlow(prefs.getString("np_background", "blurred") ?: "blurred")
     val npBackground: StateFlow<String> = _npBackground
@@ -115,13 +127,54 @@ class AppPrefs(context: Context) {
 
     /** Which home tabs are visible; defaults to all. */
     private val _visibleTabs = MutableStateFlow(
-        prefs.getStringSet("visible_tabs", setOf("recommended", "recently played", "albums", "artists", "playlists", "favorites", "downloaded", "genres", "all songs")) ?: setOf()
+        prefs.getStringSet("visible_tabs", ALL_TABS.toSet()) ?: setOf()
     )
     val visibleTabs: StateFlow<Set<String>> = _visibleTabs
 
     fun setVisibleTabs(tabs: Set<String>) {
         prefs.edit().putStringSet("visible_tabs", tabs).apply()
         _visibleTabs.value = tabs
+    }
+
+    /** Home tab order (all tabs, shown or not); StringSet can't hold order. */
+    private val _tabOrder = MutableStateFlow(readTabOrder())
+    val tabOrder: StateFlow<List<String>> = _tabOrder
+
+    fun setTabOrder(order: List<String>) {
+        prefs.edit().putString("tab_order", order.joinToString("|")).apply()
+        _tabOrder.value = readTabOrder()
+    }
+
+    private fun readTabOrder(): List<String> {
+        val saved = (prefs.getString("tab_order", "") ?: "")
+            .split("|").filter { it in ALL_TABS }
+        // Tabs added in app updates get appended so they never vanish.
+        return saved + ALL_TABS.filterNot { it in saved }
+    }
+
+    /** Visualizer rendering style: bars, wave, ring. */
+    private val _visualizerStyle = MutableStateFlow(prefs.getString("visualizer_style", "bars") ?: "bars")
+    val visualizerStyle: StateFlow<String> = _visualizerStyle
+
+    fun setVisualizerStyle(value: String) {
+        prefs.edit().putString("visualizer_style", value).apply()
+        _visualizerStyle.value = value
+    }
+
+    /** Lyrics highlight style: karaoke (sweep), fade, spotlight. */
+    private val _lyricsStyle = MutableStateFlow(prefs.getString("lyrics_style", "karaoke") ?: "karaoke")
+    val lyricsStyle: StateFlow<String> = _lyricsStyle
+
+    fun setLyricsStyle(value: String) {
+        prefs.edit().putString("lyrics_style", value).apply()
+        _lyricsStyle.value = value
+    }
+
+    companion object {
+        val ALL_TABS = listOf(
+            "recommended", "recently played", "albums", "artists",
+            "playlists", "favorites", "downloaded", "genres", "all songs"
+        )
     }
 
     fun setCustomEq(levels: List<Int>) {

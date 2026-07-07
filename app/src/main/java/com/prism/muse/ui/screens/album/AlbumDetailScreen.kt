@@ -144,7 +144,7 @@ fun AlbumDetailScreen(
                     }
                 }
 
-                itemsIndexed(songs, key = { _, s -> s.id }) { index, song ->
+                itemsIndexed(songs, key = { i, s -> "$i:${s.id}" }) { index, song ->
                     TrackRow(index + 1, song, onClick = { play(index) })
                 }
             }

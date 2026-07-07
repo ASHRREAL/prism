@@ -73,6 +73,9 @@ class LibraryRepository(
     /** Full background sync of every hub section; safe to call repeatedly. */
     suspend fun refresh() {
         if (!prefs.server.value.isConfigured || prefs.offlineMode.value) return
+        // Pull-to-refresh, login and "sync now" can all fire this; don't stack
+        // concurrent full syncs on top of each other.
+        if (syncing.value) return
         syncing.value = true
         lastError.value = null
         try {
@@ -101,7 +104,7 @@ class LibraryRepository(
                     runCatching { recentSongsRes += songsForAlbum(album.id).take(3) }
                 }
                 if (recentSongsRes.isEmpty()) recentSongsRes += randSongs
-                _recentSongs.value = recentSongsRes
+                _recentSongs.value = recentSongsRes.distinctBy { it.id }
 
                 // Recommended: mix of recent and random
                 _recommended.value = (recentSongsRes + randSongs).distinctBy { it.id }.shuffled().take(20)

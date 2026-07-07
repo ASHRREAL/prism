@@ -64,6 +64,7 @@ import com.prism.muse.ui.components.HairlineDivider
 import com.prism.muse.ui.components.PagerDots
 import com.prism.muse.ui.components.SongRow
 import com.prism.muse.ui.components.SongRowWithMenu
+import com.prism.muse.ui.components.gyroTilt
 import com.prism.muse.ui.theme.HubTitle
 import com.prism.muse.ui.theme.LocalPrismAccent
 import com.prism.muse.ui.theme.MetroListEntry
@@ -102,11 +103,12 @@ fun HomeHubScreen(
     val genres: List<Genre> by library.genres.collectAsState()
     val recommended: List<Song> by library.recommended.collectAsState()
     val playback by graph.player.state.collectAsState()
+    val depthEffect by graph.prefs.depthEffect.collectAsState()
     val visibleTabs by graph.prefs.visibleTabs.collectAsState()
+    val tabOrder by graph.prefs.tabOrder.collectAsState()
 
-    val allPanels = listOf("recommended", "recently played", "albums", "artists", "playlists", "favorites", "downloaded", "genres", "all songs")
-    val panels = remember(visibleTabs) {
-        allPanels.filter { it in visibleTabs }.ifEmpty { allPanels }
+    val panels = remember(visibleTabs, tabOrder) {
+        tabOrder.filter { it in visibleTabs }.ifEmpty { tabOrder }
     }
     val pagerState = rememberPagerState(pageCount = { panels.size })
     val scroll by remember {
@@ -164,6 +166,7 @@ fun HomeHubScreen(
                     Modifier
                         .fillMaxSize()
                         .padding(start = 24.dp, end = 24.dp)
+                        .then(if (depthEffect) Modifier.gyroTilt(maxDegrees = 3f) else Modifier)
                         .graphicsLayer {
                             val off = (page - pagerState.currentPage) - pagerState.currentPageOffsetFraction
                             val t = off.coerceIn(0f, 1f)
@@ -208,7 +211,9 @@ private fun SongsPanel(
         return
     }
     LazyColumn(contentPadding = PaddingValues(bottom = bottomPad)) {
-        itemsIndexed(songs, key = { _, s -> s.id }) { index, song ->
+        // Position-qualified key: server-built lists (recently played, etc.) can
+        // contain the same song twice, and duplicate keys crash the LazyColumn.
+        itemsIndexed(songs, key = { i, s -> "$i:${s.id}" }) { index, song ->
             if (viewModel != null) {
                 SongRowWithMenu(song = song, viewModel = viewModel, onClick = { onPlay(index) },
                     active = song.id == currentId, accent = accent)

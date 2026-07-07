@@ -14,7 +14,9 @@ data class Song(
     val streamUrl: String = "",
     val isFavorite: Boolean = false,
     val isDownloaded: Boolean = false,
-    val playCount: Int = 0
+    val playCount: Int = 0,
+    /** OpenSubsonic ReplayGain track gain in dB; 0 when the server has none. */
+    val trackGainDb: Float = 0f
 ) {
     fun serialize(): String {
         return listOf(

@@ -260,7 +260,9 @@ class SubsonicClient(private val configProvider: () -> ServerConfig) {
         artUrl = coverArtUrl(obj.optString("coverArt")),
         streamUrl = streamUrl(obj.getString("id")),
         isFavorite = obj.has("starred"),
-        playCount = obj.optInt("playCount")
+        playCount = obj.optInt("playCount"),
+        trackGainDb = obj.optJSONObject("replayGain")
+            ?.optDouble("trackGain", 0.0)?.toFloat() ?: 0f
     )
 
     private fun parseAlbum(obj: JSONObject): Album = Album(

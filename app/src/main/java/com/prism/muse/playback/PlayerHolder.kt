@@ -57,6 +57,17 @@ class PlayerHolder(
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val prefsStore = context.getSharedPreferences("aria_player", Context.MODE_PRIVATE)
 
+    /**
+     * A fixed audio session id, generated once and pinned on the player, so the
+     * DSP chain binds to a stable session for the whole process. Without this
+     * ExoPlayer's session id could change between tracks and the EQ would drop
+     * its effects (and its edits) mid-listen.
+     */
+    private val stableSessionId: Int = runCatching {
+        (context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager)
+            .generateAudioSessionId()
+    }.getOrDefault(0)
+
     val player: ExoPlayer = ExoPlayer.Builder(context)
         .setAudioAttributes(
             AudioAttributes.Builder()
@@ -66,7 +77,18 @@ class PlayerHolder(
             /* handleAudioFocus = */ true
         )
         .setHandleAudioBecomingNoisy(true)
+        // Hold CPU + WiFi awake while streaming so playback survives screen-off.
+        .setWakeMode(C.WAKE_MODE_NETWORK)
         .build()
+        .also { p ->
+            if (stableSessionId != 0) runCatching { p.audioSessionId = stableSessionId }
+        }
+
+    /** App-wide EQ / bass / virtualizer / loudness, bound to the player. */
+    val audioEffects = AudioEffects(prefs)
+
+    val audioSessionId: Int get() =
+        stableSessionId.takeIf { it != 0 } ?: runCatching { player.audioSessionId }.getOrDefault(0)
 
     private val _state = MutableStateFlow(PlaybackState())
     val state: StateFlow<PlaybackState> = _state
@@ -79,17 +101,18 @@ class PlayerHolder(
     /** Whether the original queue was created from a shuffle-press action. */
     private var wasShuffled: Boolean = false
 
-    val audioSessionId: Int get() = runCatching { player.audioSessionId }.getOrDefault(0)
-
     /**
      * Tries to restore the last playback session. Call once after construction.
      * Returns true if a session was restored and playback has begun.
      */
     fun restoreSession(): Boolean {
+        // The activity re-runs this on every recreation (rotation, theme change);
+        // never clobber a session that is already loaded or playing.
+        if (_state.value.queue.isNotEmpty()) return false
         val data = prefsStore.getString(PREFS_LAST_SONG, null) ?: return false
         val queueData = prefsStore.getString(PREFS_LAST_QUEUE, null) ?: return false
         return try {
-            val queue = queueData.split("||").mapNotNull { Song.fromSerialized(it) }
+            val queue = queueData.split("\n").mapNotNull { Song.fromSerialized(it) }
             if (queue.isEmpty()) return false
             val index = prefsStore.getInt(PREFS_LAST_INDEX, 0).coerceIn(0, queue.lastIndex)
             val position = prefsStore.getFloat(PREFS_LAST_POSITION, 0f)
@@ -108,7 +131,10 @@ class PlayerHolder(
     private fun saveSession() {
         val s = _state.value
         if (s.queue.isEmpty()) return
-        val queueData = s.queue.joinToString("||") { it.serialize() }
+        lastSaveMs = System.currentTimeMillis()
+        // Fields inside a serialized song are URL-encoded, so a newline is a
+        // safe song separator ("||" collided with empty trailing fields).
+        val queueData = s.queue.joinToString("\n") { it.serialize() }
         prefsStore.edit()
             .putString(PREFS_LAST_QUEUE, queueData)
             .putInt(PREFS_LAST_INDEX, s.currentIndex)
@@ -118,8 +144,45 @@ class PlayerHolder(
             .apply()
     }
 
+    /** Last time the session was persisted; throttles the position saves. */
+    private var lastSaveMs = 0L
+
+    /** Pending auto-resume after the deliberate inter-track gap (gapless off). */
+    private var gapResumeJob: kotlinx.coroutines.Job? = null
+
+    /** Sleep timer: minutes remaining until playback pauses (0 = off). */
+    private var sleepJob: kotlinx.coroutines.Job? = null
+    private val _sleepTimerMin = MutableStateFlow(0)
+    val sleepTimerMin: StateFlow<Int> = _sleepTimerMin
+
+    fun setSleepTimer(minutes: Int) {
+        sleepJob?.cancel()
+        _sleepTimerMin.value = minutes.coerceAtLeast(0)
+        if (minutes <= 0) return
+        sleepJob = mainScope.launch {
+            delay(minutes * 60_000L)
+            _sleepTimerMin.value = 0
+            if (_state.value.isPlaying) togglePlay()
+        }
+    }
+
     init {
         player.setPlaybackSpeed(prefs.playbackSpeed.value)
+
+        // Gapless off = pause at each item boundary, then resume after a short
+        // silence. ExoPlayer itself is gapless by default (the "on" case).
+        mainScope.launch {
+            prefs.gapless.collect { gapless ->
+                runCatching { player.pauseAtEndOfMediaItems = !gapless }
+            }
+        }
+
+        // Bind the DSP chain up front (session id is stable) and keep the EQ
+        // enable state in sync with the setting from anywhere in the app.
+        audioEffects.attach(audioSessionId)
+        mainScope.launch {
+            prefs.eqEnabled.collect { audioEffects.setEnabled(it) }
+        }
 
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -142,13 +205,41 @@ class PlayerHolder(
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 if (!demoMode) _state.update { it.copy(isPlaying = isPlaying) }
             }
+
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                // The gapless-off pause: hold a beat of silence, then continue.
+                if (!playWhenReady &&
+                    reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM
+                ) {
+                    gapResumeJob?.cancel()
+                    gapResumeJob = mainScope.launch {
+                        delay(400)
+                        player.play()
+                    }
+                }
+            }
+
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                // A dead stream (bad URL, server down mid-queue) must not end the
+                // session silently: skip to the next track when there is one,
+                // otherwise stop cleanly and reflect that in the UI state.
+                if (demoMode) return
+                if (player.hasNextMediaItem()) {
+                    player.seekToNextMediaItem()
+                    player.prepare()
+                    player.play()
+                } else {
+                    _state.update { it.copy(isPlaying = false) }
+                    saveSession()
+                }
+            }
         })
 
         mainScope.launch {
             while (true) {
                 delay(100)
                 val s = _state.value
-                if (!s.isPlaying) continue
+                if (!s.isPlaying || s.queue.isEmpty()) continue
                 if (demoMode) {
                     val duration = (s.current?.durationSec ?: 0).toFloat()
                     val next = s.positionSec + 0.1f
@@ -156,12 +247,40 @@ class PlayerHolder(
                     else _state.update { it.copy(positionSec = next) }
                 } else {
                     _state.update { it.copy(positionSec = player.currentPosition / 1000f) }
-                    // Periodically save the position
-                    val pos = player.currentPosition / 1000f
-                    if (pos > 0f && (pos.toLong() % 5 == 0L)) saveSession()
+                    applyVolumeAutomation()
+                    // Retry binding the DSP chain until the session is live.
+                    if (!audioEffects.available) audioEffects.attach(audioSessionId)
+                    // Persist position at most once every 5 seconds.
+                    if (System.currentTimeMillis() - lastSaveMs > 5000L) saveSession()
                 }
             }
         }
+    }
+
+    /**
+     * Ticks at 10Hz while playing: crossfade (a volume ramp over the last and
+     * first N seconds of each track — a real dual-player overlap isn't possible
+     * with a single ExoPlayer) and ReplayGain track-gain attenuation.
+     */
+    private fun applyVolumeAutomation() {
+        val song = _state.value.current ?: return
+        var vol = 1f
+        val cfSec = prefs.crossfadeSec.value
+        if (cfSec > 0) {
+            val durMs = player.duration
+            if (durMs > 0) {
+                val posMs = player.currentPosition
+                val cfMs = cfSec * 1000f
+                val fadeOut = ((durMs - posMs) / cfMs).coerceIn(0f, 1f)
+                val fadeIn = ((posMs / cfMs) + 0.15f).coerceIn(0f, 1f)
+                vol = minOf(fadeOut, fadeIn)
+            }
+        }
+        if (prefs.replayGain.value && song.trackGainDb != 0f) {
+            // Positive gains are clamped: volume can only attenuate.
+            vol *= Math.pow(10.0, song.trackGainDb / 20.0).toFloat().coerceIn(0f, 1f)
+        }
+        runCatching { player.volume = vol.coerceIn(0f, 1f) }
     }
 
     /** Reshuffles the queue when repeat-all re-loops with shuffle on. */
@@ -181,18 +300,19 @@ class PlayerHolder(
 
     fun setQueue(songs: List<Song>, startIndex: Int = 0, play: Boolean = true) {
         if (songs.isEmpty()) return
+        val index = startIndex.coerceIn(0, songs.lastIndex)
         demoMode = songs.all { library.playableUri(it).isBlank() }
         originalQueue = songs.toList()
         wasShuffled = false
         _state.update {
-            it.copy(queue = songs, currentIndex = startIndex, positionSec = 0f, isPlaying = play)
+            it.copy(queue = songs, currentIndex = index, positionSec = 0f, isPlaying = play)
         }
         if (demoMode) {
             runCatching { player.stop() }
             saveSession()
             return
         }
-        player.setMediaItems(songs.map(::toMediaItem), startIndex, 0L)
+        player.setMediaItems(songs.map(::toMediaItem), index, 0L)
         player.prepare()
         player.playWhenReady = play
         if (play) startService()
@@ -201,21 +321,24 @@ class PlayerHolder(
 
     fun playSong(song: Song) {
         val index = _state.value.queue.indexOfFirst { it.id == song.id }
-        if (index >= 0) {
-            _state.update { it.copy(currentIndex = index, positionSec = 0f, isPlaying = true) }
-            if (!demoMode) {
-                player.seekTo(index, 0L)
-                player.playWhenReady = true
-                startService()
-            }
-            saveSession()
-        } else {
-            setQueue(listOf(song))
+        if (index >= 0) playAt(index) else setQueue(listOf(song))
+    }
+
+    /** Jump to a queue position (safe with duplicate songs in the queue). */
+    fun playAt(index: Int) {
+        if (index !in _state.value.queue.indices) return
+        _state.update { it.copy(currentIndex = index, positionSec = 0f, isPlaying = true) }
+        if (!demoMode) {
+            player.seekTo(index, 0L)
+            player.playWhenReady = true
+            startService()
         }
+        saveSession()
     }
 
     fun togglePlay() {
         val playing = !_state.value.isPlaying
+        if (!playing) gapResumeJob?.cancel()
         _state.update { it.copy(isPlaying = playing) }
         if (!demoMode) {
             player.playWhenReady = playing
@@ -235,6 +358,7 @@ class PlayerHolder(
 
     fun skipPrevious() {
         if (demoMode) {
+            if (_state.value.queue.isEmpty()) return
             _state.update {
                 it.copy(currentIndex = (it.currentIndex - 1 + it.queue.size) % it.queue.size, positionSec = 0f)
             }
@@ -244,7 +368,9 @@ class PlayerHolder(
     fun toggleShuffle() {
         val shuffle = !_state.value.shuffle
         _state.update { it.copy(shuffle = shuffle) }
-        player.shuffleModeEnabled = shuffle
+        // Shuffle is implemented by reordering the queue itself; enabling
+        // ExoPlayer's shuffleModeEnabled on top would shuffle the already
+        // shuffled list and desync the visible queue from playback order.
         wasShuffled = true
         if (shuffle) {
             // Shuffle upcoming tracks without restarting current song
@@ -342,9 +468,23 @@ class PlayerHolder(
         saveSession()
     }
 
+    /** Drop every queued song after the current one, without touching playback. */
+    fun clearUpcoming() {
+        val s = _state.value
+        if (s.currentIndex >= s.queue.lastIndex) return
+        val kept = s.queue.take(s.currentIndex + 1)
+        _state.update { it.copy(queue = kept) }
+        originalQueue = kept.toList()
+        if (!demoMode) {
+            runCatching { player.removeMediaItems(s.currentIndex + 1, player.mediaItemCount) }
+        }
+        saveSession()
+    }
+
     private fun demoAdvance() {
+        if (_state.value.queue.isEmpty()) return
         _state.update {
-            it.copy(currentIndex = (it.currentIndex + 1) % it.queue.size.coerceAtLeast(1), positionSec = 0f)
+            it.copy(currentIndex = (it.currentIndex + 1) % it.queue.size, positionSec = 0f)
         }
         _state.value.current?.let(library::scrobble)
     }
@@ -366,13 +506,14 @@ class PlayerHolder(
             .build()
 
     private fun startService() {
+        // Plain startService, NOT startForegroundService: the latter demands
+        // startForeground() within 5s, but media3 only promotes the service once
+        // playback is actually active — a slow stream start or a broken URL then
+        // kills the whole app (ForegroundServiceDidNotStartInTimeException).
+        // This is always called from the foreground (a user tap), where plain
+        // startService is allowed; media3 handles the foreground promotion.
         runCatching {
-            val intent = Intent(context, PlaybackService::class.java)
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
-            }
+            context.startService(Intent(context, PlaybackService::class.java))
         }
     }
 }

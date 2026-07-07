@@ -1,29 +1,40 @@
 package com.prism.muse.ui.screens.settings
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -38,7 +49,16 @@ import com.prism.muse.ui.theme.TextPrimary
 import com.prism.muse.ui.theme.TextSecondary
 import com.prism.muse.ui.theme.TextTertiary
 import com.prism.muse.ui.theme.TrackedLabel
+import com.prism.muse.ui.theme.VoidBlack
 import kotlinx.coroutines.launch
+
+/** One multiple-choice settings row: title + all options shown in a sheet. */
+private class PickerData(
+    val title: String,
+    val options: List<String>,
+    val selected: String,
+    val onPick: (String) -> Unit
+)
 
 @Composable
 fun SettingsScreen(
@@ -66,6 +86,7 @@ fun SettingsScreen(
     val eqEnabled by prefs.eqEnabled.collectAsState()
 
     var downloadsBytes by remember { mutableStateOf(library.downloadsSizeBytes()) }
+    var picker by remember { mutableStateOf<PickerData?>(null) }
 
     val bgLabels = mapOf(
         "blurred" to "blurred art",
@@ -75,6 +96,7 @@ fun SettingsScreen(
     )
 
     AriaBackground {
+        Box(Modifier.fillMaxSize()) {
         Column(
             Modifier
                 .fillMaxSize()
@@ -132,7 +154,13 @@ fun SettingsScreen(
                 if (crossfade == 0) "off ›" else "${crossfade}s ›",
                 accentValue = crossfade > 0,
                 accent = accent,
-                onClick = { prefs.setCrossfadeSec((crossfade + 2) % 12) }
+                onClick = {
+                    picker = PickerData(
+                        title = "crossfade",
+                        options = listOf("off", "2s", "4s", "6s", "8s", "10s", "12s"),
+                        selected = if (crossfade == 0) "off" else "${crossfade}s"
+                    ) { sel -> prefs.setCrossfadeSec(sel.removeSuffix("s").toIntOrNull() ?: 0) }
+                }
             )
             SettingRow(
                 "Gapless playback",
@@ -154,9 +182,16 @@ fun SettingsScreen(
                 accentValue = speed != 1f,
                 accent = accent,
                 onClick = {
-                    val speeds = listOf(0.75f, 1f, 1.25f, 1.5f, 2f)
-                    val next = speeds[(speeds.indexOfFirst { it >= speed - 0.01f } + 1) % speeds.size]
-                    graph.player.setSpeed(next)
+                    val options = listOf("0.5x", "0.75x", "1x", "1.25x", "1.5x", "2x")
+                    picker = PickerData(
+                        title = "playback speed",
+                        options = options,
+                        selected = options.firstOrNull {
+                            it.removeSuffix("x").toFloat() == speed
+                        } ?: "1x"
+                    ) { sel ->
+                        graph.player.setSpeed(sel.removeSuffix("x").toFloatOrNull() ?: 1f)
+                    }
                 }
             )
             SettingRow(
@@ -165,6 +200,20 @@ fun SettingsScreen(
                 accentValue = eqEnabled,
                 accent = accent,
                 onClick = { prefs.setEqEnabled(!eqEnabled) }
+            )
+            val sleepMin by graph.player.sleepTimerMin.collectAsState()
+            SettingRow(
+                "Sleep timer",
+                if (sleepMin == 0) "off ›" else "${sleepMin}m ›",
+                accentValue = sleepMin > 0,
+                accent = accent,
+                onClick = {
+                    picker = PickerData(
+                        title = "sleep timer",
+                        options = listOf("off", "15m", "30m", "45m", "60m", "90m"),
+                        selected = if (sleepMin == 0) "off" else "${sleepMin}m"
+                    ) { sel -> graph.player.setSleepTimer(sel.removeSuffix("m").toIntOrNull() ?: 0) }
+                }
             )
 
             GroupLabel("APPEARANCE")
@@ -178,20 +227,28 @@ fun SettingsScreen(
             SettingRow("Now Playing background", "${bgLabels[npBg] ?: "blurred art"} ›",
                 accentValue = false, accent = accent,
                 onClick = {
-                    val styles = listOf("blurred", "gradient", "waves", "solid")
-                    val idx = styles.indexOf(npBg)
-                    prefs.setNpBackground(styles[(idx + 1) % styles.size])
+                    picker = PickerData(
+                        title = "now playing background",
+                        options = bgLabels.values.toList(),
+                        selected = bgLabels[npBg] ?: "blurred art"
+                    ) { sel ->
+                        prefs.setNpBackground(
+                            bgLabels.entries.firstOrNull { it.value == sel }?.key ?: "blurred"
+                        )
+                    }
                 }
             )
             SettingRow(
                 "Accent color",
-                accentName,
+                "$accentName ›",
                 accentValue = true,
                 accent = accent,
                 onClick = {
-                    val names = AccentColors.keys.toList()
-                    val idx = names.indexOf(accentName)
-                    prefs.setAccentColorName(names[(idx + 1) % names.size])
+                    picker = PickerData(
+                        title = "accent color",
+                        options = AccentColors.keys.toList(),
+                        selected = accentName
+                    ) { sel -> prefs.setAccentColorName(sel) }
                 }
             )
             SettingRow(
@@ -230,27 +287,132 @@ fun SettingsScreen(
                 }
             )
 
-            GroupLabel("HOME TABS")
-            val allTabs = listOf("recommended", "recently played", "albums", "artists", "playlists", "favorites", "downloaded", "genres", "all songs")
+            GroupLabel("HOME TABS · TAP TO SHOW/HIDE · DRAG ⋮⋮ TO REORDER")
             val visibleTabs by prefs.visibleTabs.collectAsState()
-            allTabs.forEach { tab ->
-                SettingRow(
-                    tab.replaceFirstChar { it.uppercase() },
-                    if (tab in visibleTabs) "shown" else "hidden",
-                    accentValue = tab in visibleTabs,
-                    accent = accent,
-                    onClick = {
-                        val current = visibleTabs.toMutableSet()
-                        if (tab in current) current.remove(tab) else current.add(tab)
-                        prefs.setVisibleTabs(current)
+            val tabOrder by prefs.tabOrder.collectAsState()
+            // Live, local copy dragged in real time; committed to prefs on release
+            // so we're not writing SharedPreferences on every pointer move.
+            val liveTabs = remember(tabOrder) {
+                mutableStateListOf<String>().also { it.addAll(tabOrder) }
+            }
+            var draggedTab by remember { mutableIntStateOf(-1) }
+            var tabDragAccum by remember { mutableFloatStateOf(0f) }
+            val tabRowHeightPx = with(LocalDensity.current) { 56.dp.toPx() }
+
+            liveTabs.forEachIndexed { idx, tab ->
+                val shown = tab in visibleTabs
+                val dragging = draggedTab == idx
+
+                // Swap during layout while a handle is held (mirrors the queue
+                // reorder); persistence happens on drag end.
+                if (dragging && kotlin.math.abs(tabDragAccum) > tabRowHeightPx * 0.5f) {
+                    val dir = if (tabDragAccum > 0) 1 else -1
+                    val target = (idx + dir).coerceIn(0, liveTabs.lastIndex)
+                    if (target != idx) {
+                        val moved = liveTabs.removeAt(idx)
+                        liveTabs.add(target, moved)
+                        draggedTab = target
+                        tabDragAccum -= dir * tabRowHeightPx
                     }
-                )
+                }
+
+                fun toggle() {
+                    val current = visibleTabs.toMutableSet()
+                    if (tab in current) current.remove(tab) else current.add(tab)
+                    prefs.setVisibleTabs(current)
+                }
+
+                Column(
+                    Modifier.graphicsLayer {
+                        translationY = if (dragging) tabDragAccum else 0f
+                        scaleX = if (dragging) 1.03f else 1f
+                        scaleY = if (dragging) 1.03f else 1f
+                    }
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            tab.replaceFirstChar { it.uppercase() },
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (shown) TextPrimary else TextTertiary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f).clickable { toggle() }
+                        )
+                        Text(
+                            if (shown) "shown" else "hidden",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (shown) accent else TextTertiary,
+                            modifier = Modifier.clickable { toggle() }.padding(horizontal = 12.dp)
+                        )
+                        Text(
+                            "⋮⋮",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (dragging) accent else TextTertiary,
+                            modifier = Modifier
+                                .padding(start = 4.dp)
+                                .pointerInput(tab) {
+                                    detectVerticalDragGestures(
+                                        onDragStart = {
+                                            draggedTab = liveTabs.indexOf(tab)
+                                            tabDragAccum = 0f
+                                        },
+                                        onDragEnd = {
+                                            draggedTab = -1; tabDragAccum = 0f
+                                            prefs.setTabOrder(liveTabs.toList())
+                                        },
+                                        onDragCancel = {
+                                            draggedTab = -1; tabDragAccum = 0f
+                                            prefs.setTabOrder(liveTabs.toList())
+                                        }
+                                    ) { change, dy ->
+                                        change.consume()
+                                        tabDragAccum += dy
+                                    }
+                                }
+                        )
+                    }
+                    HairlineDivider()
+                }
             }
 
             GroupLabel("ABOUT")
             SettingRow("Prism Muse", "0.2.0", accentValue = false, accent = accent, onClick = {})
-            SettingRow("Build", "prototype", accentValue = false, accent = accent, onClick = {})
+            SettingRow("Build", "beta", accentValue = false, accent = accent, onClick = {})
         }
+
+        // Multiple-choice picker sheet: scrim + all options at the bottom.
+        picker?.let { p ->
+            Box(
+                Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f))
+                    .pointerInput(Unit) { detectTapGestures { picker = null } }
+            )
+            Column(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(VoidBlack)
+                    .pointerInput(Unit) { detectTapGestures { /* consume */ } }
+                    .navigationBarsPadding()
+                    .padding(horizontal = 24.dp, vertical = 18.dp)
+            ) {
+                Text(p.title.uppercase(), style = TrackedLabel, color = TextTertiary)
+                HairlineDivider(Modifier.padding(top = 10.dp, bottom = 4.dp))
+                Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                    p.options.forEach { option ->
+                        Text(
+                            option,
+                            style = SectionHeader.copy(fontSize = 22.sp),
+                            color = if (option == p.selected) accent else TextPrimary,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { p.onPick(option); picker = null }
+                                .padding(vertical = 12.dp)
+                        )
+                    }
+                }
+            }
+        }
+        } // Box
     }
 }
 

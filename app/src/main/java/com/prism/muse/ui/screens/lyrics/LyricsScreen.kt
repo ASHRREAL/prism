@@ -36,6 +36,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -73,7 +75,9 @@ fun LyricsScreen(
     val state by viewModel.state.collectAsState()
     val song = state.current
     val accent = LocalPrismAccent.current
-    val lyricsRepo = PrismApp.graph(LocalContext.current).lyrics
+    val graph = PrismApp.graph(LocalContext.current)
+    val lyricsRepo = graph.lyrics
+    val lyricsStyle by graph.prefs.lyricsStyle.collectAsState()
     val scope = rememberCoroutineScope()
 
     var lyrics by remember { mutableStateOf<Lyrics?>(null) }
@@ -91,15 +95,40 @@ fun LyricsScreen(
         loading = false
     }
 
+    // A 60fps playback clock: the player position only ticks ~10x/sec, which
+    // made the highlight step and jitter. This advances with frame time while
+    // playing, drift-corrects gently toward the real position, and snaps on
+    // seeks — one smooth source of truth for the active line AND the sweep.
+    var smoothPosMs by remember { mutableStateOf((state.positionSec * 1000).toLong()) }
+    LaunchedEffect(Unit) {
+        var lastNanos = 0L
+        while (true) {
+            val now = androidx.compose.runtime.withFrameNanos { it }
+            val deltaMs = if (lastNanos == 0L) 0L else (now - lastNanos) / 1_000_000
+            lastNanos = now
+            val target = (state.positionSec * 1000).toLong()
+            smoothPosMs = when {
+                !state.isPlaying -> target
+                kotlin.math.abs(smoothPosMs - target) > 1200L -> target // seek/skip
+                else -> {
+                    val advanced = smoothPosMs + (deltaMs * state.speed).toLong()
+                    advanced + ((target - advanced) * 0.08f).toLong()
+                }
+            }
+        }
+    }
+
     val activeIndex by remember(lyrics) {
         derivedStateOf {
             val lines = lyrics?.lines ?: return@derivedStateOf -1
             if (lyrics?.synced != true) return@derivedStateOf -1
-            val posMs = (state.positionSec * 1000).toLong()
-            // Find the last line whose timestamp is <= current position
+            val posMs = smoothPosMs
+            // Lines are time-sorted: last line whose timestamp is <= position.
             var best = -1
             for (i in lines.indices) {
-                if (lines[i].timeMs in 0..posMs) best = i
+                val t = lines[i].timeMs
+                if (t < 0) continue
+                if (t <= posMs) best = i else break
             }
             best
         }
@@ -107,8 +136,11 @@ fun LyricsScreen(
 
     val listState = rememberLazyListState()
     LaunchedEffect(activeIndex) {
-        if (activeIndex >= 0) {
-            listState.animateScrollToItem((activeIndex - 1).coerceAtLeast(0), scrollOffset = 0)
+        // Keep the active line pinned ~1/3 from the top, and never fight the
+        // user's own scrolling.
+        if (activeIndex >= 0 && !listState.isScrollInProgress) {
+            val viewport = listState.layoutInfo.viewportSize.height
+            listState.animateScrollToItem(activeIndex, scrollOffset = -viewport / 3)
         }
     }
 
@@ -227,27 +259,58 @@ fun LyricsScreen(
                         contentPadding = PaddingValues(horizontal = 28.dp, vertical = 32.dp),
                         verticalArrangement = Arrangement.spacedBy(22.dp)
                     ) {
-                        itemsIndexed(current.lines) { index, line ->
+                        itemsIndexed(current.lines, key = { i, _ -> i }) { index, line ->
                             val active = index == activeIndex
-                            val fontSize = if (active) 26f else 20f
+                            // Distance from the active line drives the spotlight
+                            // dimming; smoothed so scrolling isn't steppy.
+                            val distance = if (activeIndex < 0) 0 else kotlin.math.abs(index - activeIndex)
+
+                            // Fixed font size + graphicsLayer scale: animating the
+                            // font size re-laid-out the whole list every frame,
+                            // which both jittered the auto-scroll and let recycled
+                            // rows flash as a second "highlighted" line.
+                            val targetScale = when {
+                                !active -> 1f
+                                lyricsStyle == "spotlight" -> 1.24f
+                                lyricsStyle == "fade" -> 1.06f
+                                else -> 1.18f
+                            }
+                            val scale by animateFloatAsState(targetScale, tween(240), label = "lineScale")
+                            val targetAlpha = when {
+                                active -> 1f
+                                lyricsStyle == "spotlight" -> (0.32f - distance * 0.06f).coerceIn(0.06f, 0.32f)
+                                lyricsStyle == "fade" -> 0.5f
+                                else -> 1f // karaoke: dim handled by text color
+                            }
+                            val alpha by animateFloatAsState(targetAlpha, tween(220), label = "lineAlpha")
+
                             val baseStyle = MaterialTheme.typography.titleLarge.copy(
-                                fontSize = fontSize.sp,
+                                fontSize = 21.sp,
                                 fontWeight = if (active) FontWeight.Medium else FontWeight.Light,
-                                lineHeight = (fontSize + 6).sp
+                                lineHeight = 27.sp
                             )
                             val clickMod = Modifier
                                 .fillMaxWidth()
+                                .graphicsLayer {
+                                    scaleX = scale
+                                    scaleY = scale
+                                    this.alpha = alpha
+                                    transformOrigin = TransformOrigin(0f, 0.5f)
+                                }
                                 .clickable(enabled = current.synced && line.timeMs >= 0) {
                                     viewModel.seekTo(line.timeMs / 1000f)
                                 }
 
-                            if (active && current.synced) {
-                                val start = line.timeMs
-                                val end = current.lines.getOrNull(index + 1)?.timeMs ?: (start + 3000L)
-                                val raw = if (end > start)
-                                    ((state.positionSec * 1000f - start) / (end - start)) else 1f
-                                // Raw fraction for instant word-by-word tracking
-                                val a = raw.coerceIn(0f, 1f)
+                            // Karaoke sweep only in the karaoke style; the other
+                            // styles use a solid highlight + scale/fade motion.
+                            if (active && current.synced && lyricsStyle == "karaoke") {
+                                val startT = line.timeMs
+                                val end = current.lines.getOrNull(index + 1)?.timeMs ?: (startT + 3000L)
+                                // smoothPosMs already advances at 60fps — no extra
+                                // per-item animation (those lagged and ghosted).
+                                val a = if (end > startT)
+                                    ((smoothPosMs - startT).toFloat() / (end - startT)).coerceIn(0f, 1f)
+                                else 1f
                                 val dim = TextSecondary.copy(alpha = 0.4f)
                                 val brush = Brush.horizontalGradient(
                                     colorStops = arrayOf(
@@ -259,12 +322,12 @@ fun LyricsScreen(
                                 )
                                 Text(line.text, style = baseStyle.merge(TextStyle(brush = brush)), modifier = clickMod)
                             } else {
-                                val color by animateColorAsState(
-                                    if (active) TextPrimary else TextTertiary,
-                                    tween(200),
-                                    label = "lineColor"
+                                Text(
+                                    line.text,
+                                    style = baseStyle,
+                                    color = if (active) TextPrimary else TextTertiary,
+                                    modifier = clickMod
                                 )
-                                Text(line.text, style = baseStyle, color = color, modifier = clickMod)
                             }
                         }
                     }
@@ -278,17 +341,22 @@ fun LyricsScreen(
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val styleOrder = listOf("karaoke", "fade", "spotlight")
                 TextLinkRow(
                     links = listOf(
                         if (lyrics?.synced == true) "synced" else "unsynced",
+                        lyricsStyle,
                         "translate",
-                        "search",
-                        "offline cache"
+                        "search"
                     ),
-                    activeLink = if (lyrics?.synced == true) "synced" else null,
+                    activeLink = lyricsStyle,
                     accent = accent,
                     onClick = { link ->
                         when (link) {
+                            lyricsStyle -> {
+                                val next = styleOrder[(styleOrder.indexOf(lyricsStyle) + 1) % styleOrder.size]
+                                graph.prefs.setLyricsStyle(next)
+                            }
                             "search" -> {
                                 lyricsRepo.clearCache()
                                 reloadKey++

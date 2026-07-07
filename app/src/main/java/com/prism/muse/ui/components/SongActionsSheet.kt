@@ -105,6 +105,8 @@ fun SongActionsHost(viewModel: PlaybackViewModel) {
                 val isFav = favorites.any { it.id == song.id }
                 var picking by remember(song.id) { mutableStateOf(false) }
                 var newName by remember(song.id) { mutableStateOf("") }
+                var downloaded by remember(song.id) { mutableStateOf(graph.library.isDownloaded(song.id)) }
+                var downloading by remember(song.id) { mutableStateOf(false) }
 
                 Column(
                     Modifier
@@ -123,6 +125,25 @@ fun SongActionsHost(viewModel: PlaybackViewModel) {
                         ActionItem("add to queue") { viewModel.addToQueue(song); SongActions.close() }
                         ActionItem(if (isFav) "unlike" else "like") { viewModel.toggleFavorite(song); SongActions.close() }
                         ActionItem("add to playlist") { picking = true }
+                        val downloadLabel = when {
+                            downloading -> "downloading…"
+                            downloaded -> "remove download"
+                            else -> "download"
+                        }
+                        ActionItem(downloadLabel) {
+                            if (downloading) return@ActionItem
+                            if (downloaded) {
+                                graph.library.deleteDownload(song.id)
+                                downloaded = false
+                            } else if (graph.library.playableUri(song).isNotBlank() || song.streamUrl.isNotBlank()) {
+                                downloading = true
+                                scope.launch {
+                                    val ok = graph.library.download(song)
+                                    downloading = false
+                                    downloaded = ok
+                                }
+                            }
+                        }
                         if (SongActions.queueContext) {
                             ActionItem("remove from queue") { viewModel.removeFromQueue(song); SongActions.close() }
                         }

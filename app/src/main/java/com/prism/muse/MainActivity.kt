@@ -69,14 +69,44 @@ class MainActivity : ComponentActivity() {
 
     private val playbackViewModel: PlaybackViewModel by viewModels()
 
+    /**
+     * Connecting a MediaController binds and starts [PlaybackService], which is
+     * what registers the MediaSession with the system — without it the session
+     * only comes alive if the manual startService() call raced correctly, and
+     * the phone's media controls never learned about us. The controller itself
+     * is unused; the UI keeps talking to the shared ExoPlayer directly.
+     */
+    private var controllerFuture:
+        com.google.common.util.concurrent.ListenableFuture<androidx.media3.session.MediaController>? = null
+
+    override fun onStart() {
+        super.onStart()
+        runCatching {
+            val token = androidx.media3.session.SessionToken(
+                this,
+                android.content.ComponentName(this, com.prism.muse.playback.PlaybackService::class.java)
+            )
+            controllerFuture = androidx.media3.session.MediaController.Builder(this, token).buildAsync()
+        }
+    }
+
+    override fun onStop() {
+        controllerFuture?.let { androidx.media3.session.MediaController.releaseFuture(it) }
+        controllerFuture = null
+        super.onStop()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            requestPermissions(
-                arrayOf(android.Manifest.permission.POST_NOTIFICATIONS, android.Manifest.permission.RECORD_AUDIO),
-                1001
-            )
+        // Notification permission so the media-controls notification can show on
+        // Android 13+. RECORD_AUDIO is only needed by the visualizer, which asks
+        // for it itself when opened — requesting the mic at launch scares users.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 1001)
         }
         setContent {
             val prefs = PrismApp.graph(this).prefs
@@ -129,14 +159,14 @@ private fun PrismApp(playbackViewModel: PlaybackViewModel) {
 
     BackHandler(enabled = true) {
         when {
-            lyricsOpen -> lyricsOpen = false
-            eqOpen -> eqOpen = false
+            queueOpen -> queueOpen = false
             visOpen -> visOpen = false
+            eqOpen -> eqOpen = false
+            lyricsOpen -> lyricsOpen = false
+            nowPlayingOpen -> nowPlayingOpen = false
+            songListOpen -> songListOpen = false
             loginOpen -> loginOpen = false
             settingsOpen -> settingsOpen = false
-            queueOpen -> queueOpen = false
-            songListOpen -> songListOpen = false
-            nowPlayingOpen -> nowPlayingOpen = false
             navController.previousBackStackEntry != null -> {
                 navController.popBackStack()
             }
@@ -188,7 +218,6 @@ private fun PrismApp(playbackViewModel: PlaybackViewModel) {
             }
         )
 
-        val playbackState by playbackViewModel.state.collectAsState()
         val currentArtUrl = playbackState.current?.artUrl
 
         // Layer 1: Settings / SongLists / Login (bottom layer)

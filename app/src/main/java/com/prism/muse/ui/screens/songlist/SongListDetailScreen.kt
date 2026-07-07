@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -93,9 +93,12 @@ fun SongListDetailScreen(
                     contentPadding = PaddingValues(start = 0.dp, top = 4.dp, end = 0.dp, bottom = 80.dp),
                     modifier = Modifier.weight(1f)
                 ) {
-                    items(songs, key = { it.id }) { song ->
+                    // Playlists may contain the same song more than once; a plain
+                    // id key would crash on the duplicate. Play by index so the
+                    // tapped row (not the first duplicate) starts.
+                    itemsIndexed(songs, key = { i, s -> "$i:${s.id}" }) { index, song ->
                         SongRowWithMenu(song = song, viewModel = viewModel,
-                            onClick = { viewModel.playSong(song) }, accent = accent)
+                            onClick = { viewModel.playQueue(songs, index) }, accent = accent)
                     }
                 }
             }

@@ -132,7 +132,10 @@ fun QueueScreen(viewModel: PlaybackViewModel, onBack: () -> Unit) {
                 },
                 contentPadding = PaddingValues(start = 22.dp, end = 22.dp, bottom = 12.dp)
             ) {
-                itemsIndexed(queueList.drop(safeCurrentIndex), key = { _, s -> s.id }) { idxShown, song ->
+                // Key includes the position: the same song can legitimately sit in
+                // the queue twice ("add to queue" twice), and duplicate LazyColumn
+                // keys crash with IllegalArgumentException.
+                itemsIndexed(queueList.drop(safeCurrentIndex), key = { i, s -> "${i + safeCurrentIndex}:${s.id}" }) { idxShown, song ->
                     val realIdx = idxShown + safeCurrentIndex
                     val isCurrent = song.id == currentId
                     val isDragging = draggedIndex == realIdx
@@ -150,7 +153,7 @@ fun QueueScreen(viewModel: PlaybackViewModel, onBack: () -> Unit) {
                     }
 
                     if (isCurrent) {
-                        QueueRow(song, isCurrent = true, accent = accent, onClick = { viewModel.playSong(song) })
+                        QueueRow(song, isCurrent = true, accent = accent, onClick = { viewModel.playAt(realIdx) })
                     } else {
                         val dismiss = rememberSwipeToDismissBoxState(confirmValueChange = { v ->
                             if (v == SwipeToDismissBoxValue.EndToStart) {
@@ -171,7 +174,7 @@ fun QueueScreen(viewModel: PlaybackViewModel, onBack: () -> Unit) {
                             Box {
                                 QueueRow(
                                     song = song, isCurrent = false, accent = accent,
-                                    onClick = { viewModel.playSong(song) },
+                                    onClick = { viewModel.playAt(realIdx) },
                                     isDragging = isDragging,
                                     dragOffset = if (isDragging) dragAccumY else 0f,
                                     onDragStart = { draggedIndex = realIdx; dragAccumY = 0f },
@@ -195,7 +198,7 @@ fun QueueScreen(viewModel: PlaybackViewModel, onBack: () -> Unit) {
                 Text("shuffle", style = SectionHeader.copy(fontSize = 18.sp), color = TextPrimary,
                     modifier = Modifier.clickable { viewModel.shuffleQueue() })
                 Text("clear", style = SectionHeader.copy(fontSize = 18.sp), color = TextSecondary,
-                    modifier = Modifier.clickable { state.current?.let { viewModel.playQueue(listOf(it), 0) } })
+                    modifier = Modifier.clickable { viewModel.clearUpcoming() })
             }
         }
     }

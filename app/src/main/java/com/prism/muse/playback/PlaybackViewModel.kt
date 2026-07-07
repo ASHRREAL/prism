@@ -29,10 +29,12 @@ class PlaybackViewModel(app: Application) : AndroidViewModel(app) {
     fun cycleRepeat() = holder.cycleRepeat()
     fun setSpeed(speed: Float) = holder.setSpeed(speed)
     fun playSong(song: Song) = holder.playSong(song)
+    fun playAt(index: Int) = holder.playAt(index)
     fun playQueue(songs: List<Song>, startIndex: Int = 0) = holder.setQueue(songs, startIndex)
     fun addNext(song: Song) = holder.addNext(song)
     fun addToQueue(song: Song) = holder.addToQueue(song)
     fun shuffleQueue() = holder.shuffleQueue()
+    fun clearUpcoming() = holder.clearUpcoming()
     fun removeFromQueue(song: Song) = holder.removeFromQueue(song)
 
     fun toggleFavorite(song: Song) = library.toggleFavorite(song)

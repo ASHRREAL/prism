@@ -1,9 +1,6 @@
 package com.prism.muse.ui.screens.eq
 
-import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
-import android.media.audiofx.LoudnessEnhancer
-import android.media.audiofx.Virtualizer
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -27,14 +24,13 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,34 +62,22 @@ fun EqScreen(
     artUrl: String? = null
 ) {
     val accent = LocalPrismAccent.current
-    val sessionId = viewModel.audioSessionId
     val context = LocalContext.current
-    val prefs = PrismApp.graph(context).prefs
-    val scope = rememberCoroutineScope()
+    val graph = PrismApp.graph(context)
+    val prefs = graph.prefs
     var eqEnabled by remember { mutableStateOf(prefs.eqEnabled.value) }
 
-    val effects = remember(sessionId) {
-        runCatching {
-            Effects(
-                eq = Equalizer(0, sessionId).apply { enabled = eqEnabled },
-                bass = BassBoost(0, sessionId).apply { enabled = true },
-                virt = Virtualizer(0, sessionId).apply { enabled = true },
-                loud = runCatching { LoudnessEnhancer(sessionId) }.getOrNull()
-            )
-        }.getOrNull()
-    }
-    LaunchedEffect(effects) {
-        val e = effects?.eq ?: return@LaunchedEffect
-        val saved = prefs.customEq.value.split(",").mapNotNull { it.trim().toIntOrNull() }
-        if (saved.size == e.numberOfBands.toInt()) {
-            saved.forEachIndexed { i, lvl -> runCatching { e.setBandLevel(i.toShort(), lvl.toShort()) } }
-        }
-    }
-    DisposableEffect(effects) {
-        onDispose { effects?.release() }
-    }
+    // The DSP chain is owned by the player (app-scoped, stable session), so it
+    // survives navigation and keeps applying during playback. `revision` bumps
+    // whenever it (re)binds, so the metadata/band snapshots below rebuild then.
+    val effects = graph.player.audioEffects
+    val revision by effects.revision.collectAsState()
+    LaunchedEffect(Unit) { effects.attach(graph.player.audioSessionId) }
 
     var menuExpanded by remember { mutableStateOf(false) }
+    // Bumped by actions (reset/preset from the menu) that change bands from
+    // outside the sliders, so the sliders re-read the equalizer.
+    var reloadTick by remember { mutableStateOf(0) }
     var savePresetDialog by remember { mutableStateOf(false) }
     var presetName by remember { mutableStateOf("") }
     val savedPresets = prefs.savedEqPresets.value
@@ -162,11 +146,15 @@ fun EqScreen(
                             text = { Text("Reset to flat", color = TextTertiary) },
                             onClick = {
                                 menuExpanded = false
-                                effects?.eq?.let { eq ->
-                                    for (i in 0 until eq.numberOfBands) {
-                                        runCatching { eq.setBandLevel(i.toShort(), 0) }
+                                effects.eq?.let { eq ->
+                                    runCatching {
+                                        for (i in 0 until eq.numberOfBands) {
+                                            runCatching { eq.setBandLevel(i.toShort(), 0) }
+                                        }
                                     }
                                 }
+                                effects.persist()
+                                reloadTick++
                             }
                         )
                         // Saved presets sub-menu
@@ -175,7 +163,9 @@ fun EqScreen(
                                 text = { Text(name, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                 onClick = {
                                     menuExpanded = false
-                                    applyPreset(effects?.eq, data)
+                                    applyPreset(effects.eq, data)
+                                    effects.persist()
+                                    reloadTick++
                                 }
                             )
                         }
@@ -214,8 +204,10 @@ fun EqScreen(
                     Text("save", style = SectionHeader.copy(fontSize = 18.sp),
                         color = if (presetName.isBlank()) TextTertiary else accent,
                         modifier = Modifier.clickable(enabled = presetName.isNotBlank()) {
-                            val e = effects?.eq ?: return@clickable
-                            val levels = (0 until e.numberOfBands).map { e.getBandLevel(it.toShort()).toInt() }
+                            val e = effects.eq ?: return@clickable
+                            val levels = runCatching {
+                                (0 until e.numberOfBands).map { e.getBandLevel(it.toShort()).toInt() }
+                            }.getOrNull() ?: return@clickable
                             prefs.saveEqPreset(presetName.trim(), levels)
                             savePresetDialog = false
                             presetName = ""
@@ -228,7 +220,28 @@ fun EqScreen(
                 }
             }
 
-            if (effects == null) {
+            // Reading band/preset metadata can itself throw on flaky audio HALs;
+            // gather it once behind runCatching and bail out to the placeholder
+            // text rather than crashing the screen.
+            val eqInfo = remember(revision) {
+                val eq0 = effects.eq ?: return@remember null
+                runCatching {
+                    EqInfo(
+                        bandCount = eq0.numberOfBands.toInt(),
+                        minLevel = eq0.bandLevelRange[0].toInt(),
+                        maxLevel = eq0.bandLevelRange[1].toInt(),
+                        presetNames = (0 until eq0.numberOfPresets).map { i ->
+                            runCatching { eq0.getPresetName(i.toShort()) }.getOrDefault("preset $i")
+                        },
+                        centerFreqHz = (0 until eq0.numberOfBands.toInt()).map { b ->
+                            runCatching { eq0.getCenterFreq(b.toShort()) / 1000 }.getOrDefault(0)
+                        }
+                    )
+                }.getOrNull()
+            }
+
+            val eq = effects.eq
+            if (eq == null || eqInfo == null || eqInfo.bandCount <= 0) {
                 Text(
                     "equalizer unavailable — start playback on a real stream first",
                     style = MaterialTheme.typography.bodyLarge,
@@ -238,14 +251,16 @@ fun EqScreen(
                 return@PlayerBackdrop
             }
 
-            val eq = effects.eq
-            val bandCount = eq.numberOfBands.toInt()
-            val range = eq.bandLevelRange
-            val minLevel = range[0].toInt()
-            val maxLevel = range[1].toInt()
+            val bandCount = eqInfo.bandCount
+            val minLevel = eqInfo.minLevel
+            val maxLevel = eqInfo.maxLevel
 
-            val bandLevels = remember {
-                mutableStateListOf<Int>().apply { repeat(bandCount) { add(eq.getBandLevel(it.toShort()).toInt()) } }
+            val bandLevels = remember(revision, reloadTick) {
+                mutableStateListOf<Int>().apply {
+                    repeat(bandCount) {
+                        add(runCatching { eq.getBandLevel(it.toShort()).toInt() }.getOrDefault(0))
+                    }
+                }
             }
             var presetIndex by remember { mutableIntStateOf(-1) }
             var activeBand by remember { mutableIntStateOf(bandCount / 2) }
@@ -256,17 +271,18 @@ fun EqScreen(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    if (presetIndex < 0) "Custom" else eq.getPresetName(presetIndex.toShort()),
+                    if (presetIndex < 0) "Custom" else eqInfo.presetNames.getOrNull(presetIndex) ?: "Custom",
                     style = MaterialTheme.typography.bodyLarge,
                     color = accent
                 )
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                    // Edits auto-save now; this stays as an explicit confirm.
                     Text(
                         "save",
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextSecondary,
                         modifier = Modifier.clickable {
-                            prefs.setCustomEq((0 until bandCount).map { bandLevels[it] })
+                            effects.persist()
                             presetIndex = -1
                             android.widget.Toast.makeText(context, "saved", android.widget.Toast.LENGTH_SHORT).show()
                         }
@@ -278,7 +294,7 @@ fun EqScreen(
                         modifier = Modifier.clickable {
                             eqEnabled = !eqEnabled
                             prefs.setEqEnabled(eqEnabled)
-                            runCatching { eq.enabled = eqEnabled }
+                            effects.setEnabled(eqEnabled)
                         }
                     )
                 }
@@ -295,15 +311,17 @@ fun EqScreen(
                     color = if (presetIndex < 0) accent else TextSecondary,
                     modifier = Modifier.clickable { presetIndex = -1 }
                 )
-                for (i in 0 until eq.numberOfPresets) {
+                eqInfo.presetNames.forEachIndexed { i, name ->
                     Text(
-                        eq.getPresetName(i.toShort()).lowercase(),
+                        name.lowercase(),
                         style = SectionHeader.copy(fontSize = 18.sp),
                         color = if (presetIndex == i) accent else TextSecondary,
                         modifier = Modifier.clickable {
                             presetIndex = i
-                            runCatching { eq.usePreset(i.toShort()) }
-                            repeat(bandCount) { b -> bandLevels[b] = eq.getBandLevel(b.toShort()).toInt() }
+                            effects.usePreset(i)
+                            repeat(bandCount) { b ->
+                                bandLevels[b] = runCatching { eq.getBandLevel(b.toShort()).toInt() }.getOrDefault(bandLevels[b])
+                            }
                         }
                     )
                 }
@@ -315,7 +333,7 @@ fun EqScreen(
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 repeat(bandCount) { band ->
-                    val centerHz = eq.getCenterFreq(band.toShort()) / 1000
+                    val centerHz = eqInfo.centerFreqHz.getOrElse(band) { 0 }
                     BandSlider(
                         label = if (centerHz >= 1000) "${centerHz / 1000}k" else "$centerHz",
                         fraction = (bandLevels[band] - minLevel).toFloat() / (maxLevel - minLevel).coerceAtLeast(1),
@@ -326,31 +344,28 @@ fun EqScreen(
                             presetIndex = -1
                             val level = (minLevel + f * (maxLevel - minLevel)).toInt()
                             bandLevels[band] = level
-                            runCatching { eq.setBandLevel(band.toShort(), level.toShort()) }
+                            effects.setBand(band, level)
                         }
                     )
                 }
             }
 
-            var bassOn by remember { mutableStateOf(true) }
-            var virtOn by remember { mutableStateOf(false) }
-            var loudOn by remember { mutableStateOf(false) }
+            var bassOn by remember { mutableStateOf(effects.bassOn) }
+            var virtOn by remember { mutableStateOf(effects.virtOn) }
+            var loudOn by remember { mutableStateOf(effects.loudOn) }
 
             Column(Modifier.fillMaxWidth().padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 ToggleRow("Bass Boost", bassOn, accent) {
                     bassOn = !bassOn
-                    runCatching { effects.bass.setStrength(if (bassOn) 700 else 0) }
+                    effects.bassOn = bassOn
                 }
                 ToggleRow("Virtualizer", virtOn, accent) {
                     virtOn = !virtOn
-                    runCatching { effects.virt.setStrength(if (virtOn) 700 else 0) }
+                    effects.virtOn = virtOn
                 }
                 ToggleRow("Loudness", loudOn, accent) {
                     loudOn = !loudOn
-                    runCatching {
-                        effects.loud?.setTargetGain(if (loudOn) 500 else 0)
-                        effects.loud?.enabled = loudOn
-                    }
+                    effects.loudOn = loudOn
                 }
             }
 
@@ -368,25 +383,22 @@ fun EqScreen(
 
 private fun applyPreset(eq: Equalizer?, data: String) {
     val e = eq ?: return
-    val levels = data.split(",").mapNotNull { it.trim().toIntOrNull() }
-    if (levels.size == e.numberOfBands.toInt()) {
-        levels.forEachIndexed { i, lvl -> runCatching { e.setBandLevel(i.toShort(), lvl.toShort()) } }
+    runCatching {
+        val levels = data.split(",").mapNotNull { it.trim().toIntOrNull() }
+        if (levels.size == e.numberOfBands.toInt()) {
+            levels.forEachIndexed { i, lvl -> runCatching { e.setBandLevel(i.toShort(), lvl.toShort()) } }
+        }
     }
 }
 
-private class Effects(
-    val eq: Equalizer,
-    val bass: BassBoost,
-    val virt: Virtualizer,
-    val loud: LoudnessEnhancer?
-) {
-    fun release() {
-        runCatching { eq.release() }
-        runCatching { bass.release() }
-        runCatching { virt.release() }
-        runCatching { loud?.release() }
-    }
-}
+/** Equalizer metadata snapshotted once behind runCatching (HALs can throw). */
+private class EqInfo(
+    val bandCount: Int,
+    val minLevel: Int,
+    val maxLevel: Int,
+    val presetNames: List<String>,
+    val centerFreqHz: List<Int>
+)
 
 @Composable
 private fun BandSlider(
