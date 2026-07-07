@@ -56,7 +56,7 @@ fun GlassSurface(
 }
 
 /** Thin translucent divider / chip background, e.g. for the transparent bottom nav bar. */
-fun Modifier.glassBar(shape: Shape = RoundedCornerShape(50)) = this
+fun Modifier.glassBar(shape: Shape = RoundedCornerShape(0.dp)) = this
     .clip(shape)
     .background(Brush.verticalGradient(listOf(GlassWhite08, GlassWhite04)))
     .border(1.dp, GlassStroke, shape)

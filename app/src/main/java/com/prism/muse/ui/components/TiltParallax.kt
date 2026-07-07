@@ -9,15 +9,14 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
-import androidx.compose.runtime.rememberCoroutineScope
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * Tilts the composable in 3D by sampling the accelerometer, giving album art
@@ -36,20 +35,26 @@ fun Modifier.gyroTilt(maxDegrees: Float = 6f, perspective: Float = 0.0016f): Mod
         val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
         val sensor = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         val listener = object : SensorEventListener {
+            private var lastX = 0f
+            private var lastY = 0f
             override fun onSensorChanged(event: SensorEvent) {
-                val x = event.values[0].coerceIn(-9.8f, 9.8f) / 9.8f
-                val y = event.values[1].coerceIn(-9.8f, 9.8f) / 9.8f
+                val rawX = event.values[0].coerceIn(-9.8f, 9.8f) / 9.8f
+                val rawY = event.values[1].coerceIn(-9.8f, 9.8f) / 9.8f
+                val x = (rawX * 20f).roundToInt() / 20f
+                val y = (rawY * 20f).roundToInt() / 20f
+                if (abs(x - lastX) < 0.03f && abs(y - lastY) < 0.03f) return
+                lastX = x; lastY = y
                 scope.launch {
-                    rotationX.animateTo(-y * maxDegrees, spring(stiffness = 120f))
+                    rotationX.animateTo(-y * maxDegrees, spring(stiffness = 80f))
                 }
                 scope.launch {
-                    rotationY.animateTo(x * maxDegrees, spring(stiffness = 120f))
+                    rotationY.animateTo(x * maxDegrees, spring(stiffness = 80f))
                 }
             }
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
         }
         if (sensor != null) {
-            sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_GAME)
+            sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_NORMAL)
         }
         onDispose {
             sensorManager?.unregisterListener(listener)

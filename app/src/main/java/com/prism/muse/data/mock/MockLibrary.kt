@@ -18,16 +18,16 @@ object MockLibrary {
     )
 
     val albums: List<Album> = listOf(
-        Album("al1", "Cinema", "Andrea Bocelli", 2015, "art_cinema", 14, "Classical Crossover", palette[0]),
-        Album("al2", "Discovery", "Daft Punk", 2001, "art_discovery", 14, "Electronic", palette[1]),
-        Album("al3", "In Rainbows", "Radiohead", 2007, "art_rainbows", 10, "Alt Rock", palette[2]),
-        Album("al4", "Blonde", "Frank Ocean", 2016, "art_blonde", 17, "R&B", palette[3]),
-        Album("al5", "Currents", "Tame Impala", 2015, "art_currents", 13, "Psych Pop", palette[4]),
-        Album("al6", "To Pimp a Butterfly", "Kendrick Lamar", 2015, "art_tpab", 16, "Hip Hop", palette[5]),
-        Album("al7", "Random Access Memories", "Daft Punk", 2013, "art_ram", 13, "Electronic", palette[6]),
-        Album("al8", "Norman F***ing Rockwell", "Lana Del Rey", 2019, "art_nfr", 14, "Indie Pop", palette[7]),
-        Album("al9", "Ctrl", "SZA", 2017, "art_ctrl", 14, "R&B", palette[8]),
-        Album("al10", "Wildflower", "The Avalanches", 2016, "art_wildflower", 22, "Downtempo", palette[9]),
+        Album("al1", "Cinema", "Andrea Bocelli", "", 2015, "art_cinema", 14, "Classical Crossover", palette[0]),
+        Album("al2", "Discovery", "Daft Punk", "", 2001, "art_discovery", 14, "Electronic", palette[1]),
+        Album("al3", "In Rainbows", "Radiohead", "", 2007, "art_rainbows", 10, "Alt Rock", palette[2]),
+        Album("al4", "Blonde", "Frank Ocean", "", 2016, "art_blonde", 17, "R&B", palette[3]),
+        Album("al5", "Currents", "Tame Impala", "", 2015, "art_currents", 13, "Psych Pop", palette[4]),
+        Album("al6", "To Pimp a Butterfly", "Kendrick Lamar", "", 2015, "art_tpab", 16, "Hip Hop", palette[5]),
+        Album("al7", "Random Access Memories", "Daft Punk", "", 2013, "art_ram", 13, "Electronic", palette[6]),
+        Album("al8", "Norman F***ing Rockwell", "Lana Del Rey", "", 2019, "art_nfr", 14, "Indie Pop", palette[7]),
+        Album("al9", "Ctrl", "SZA", "", 2017, "art_ctrl", 14, "R&B", palette[8]),
+        Album("al10", "Wildflower", "The Avalanches", "", 2016, "art_wildflower", 22, "Downtempo", palette[9]),
     )
 
     val artists: List<Artist> = listOf(

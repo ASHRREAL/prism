@@ -2,6 +2,7 @@ package com.prism.muse
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -11,43 +12,44 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.compose.ui.Modifier
 import androidx.navigation.compose.rememberNavController
 import com.prism.muse.playback.PlaybackViewModel
 import com.prism.muse.ui.components.MiniPlayer
-import com.prism.muse.ui.components.glassBar
-import com.prism.muse.ui.nav.PrismNavHost
-import com.prism.muse.ui.nav.Routes
-import com.prism.muse.ui.screens.nowplaying.NowPlayingScreen
-import com.prism.muse.ui.theme.DefaultAccent
-import com.prism.muse.ui.theme.PrismMuseTheme
-import com.prism.muse.ui.theme.TextTertiary
+import com.prism.muse.ui.components.SongActionsHost
 import com.prism.muse.ui.components.seedColor
+import com.prism.muse.ui.nav.PrismNavHost
+import com.prism.muse.ui.screens.nowplaying.NowPlayingScreen
+import com.prism.muse.ui.screens.lyrics.LyricsScreen
+import com.prism.muse.ui.screens.eq.EqScreen
+import com.prism.muse.ui.screens.visualizer.VisualizerScreen
+import com.prism.muse.ui.screens.queue.QueueScreen
+import com.prism.muse.ui.screens.settings.SettingsScreen
+import com.prism.muse.ui.screens.login.LoginScreen
+import com.prism.muse.ui.screens.songlist.SongListDetailScreen
+import com.prism.muse.ui.theme.PrismMuseTheme
+import com.prism.muse.ui.theme.VoidBlack
+import com.prism.muse.ui.theme.accentColorByName
+import com.prism.muse.data.model.Song
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -57,107 +59,265 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            PrismMuseTheme {
+            val prefs = PrismApp.graph(this).prefs
+            val accentName by prefs.accentColorName.collectAsState()
+            PrismMuseTheme(accent = accentColorByName(accentName)) {
                 PrismApp(playbackViewModel)
             }
         }
     }
 }
 
-private data class Tab(val route: String, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
-
-private val tabs = listOf(
-    Tab(Routes.HOME, "home", Icons.Rounded.Home),
-    Tab(Routes.SEARCH, "search", Icons.Rounded.Search),
-    Tab(Routes.SETTINGS, "settings", Icons.Rounded.Settings),
-)
-
 @Composable
 private fun PrismApp(playbackViewModel: PlaybackViewModel) {
     val navController = rememberNavController()
     var nowPlayingOpen by remember { mutableStateOf(false) }
-    val backStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = backStackEntry?.destination?.route
+    var lyricsOpen by remember { mutableStateOf(false) }
+    var eqOpen by remember { mutableStateOf(false) }
+    var settingsOpen by remember { mutableStateOf(false) }
+    var loginOpen by remember { mutableStateOf(false) }
+    var queueOpen by remember { mutableStateOf(false) }
+    var visOpen by remember { mutableStateOf(false) }
+    var songListOpen by remember { mutableStateOf(false) }
+    var songListTitle by remember { mutableStateOf("") }
+    var songListSongs by remember { mutableStateOf(emptyList<Song>()) }
+    var lastBackMs by remember { mutableStateOf(0L) }
 
-    Box(Modifier.fillMaxSize()) {
+    val overlayOpen = nowPlayingOpen || lyricsOpen || eqOpen || visOpen || settingsOpen || loginOpen || queueOpen || songListOpen
+
+    val context = LocalContext.current
+    val activity = context as? android.app.Activity
+    val graph = PrismApp.graph(context)
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        graph.player.restoreSession()
+    }
+
+    BackHandler(enabled = true) {
+        when {
+            lyricsOpen -> lyricsOpen = false
+            eqOpen -> eqOpen = false
+            visOpen -> visOpen = false
+            loginOpen -> loginOpen = false
+            settingsOpen -> settingsOpen = false
+            queueOpen -> queueOpen = false
+            songListOpen -> songListOpen = false
+            nowPlayingOpen -> nowPlayingOpen = false
+            navController.previousBackStackEntry != null -> {
+                navController.popBackStack()
+            }
+            else -> {
+                val now = System.currentTimeMillis()
+                if (now - lastBackMs < 2000) {
+                    activity?.finish()
+                } else {
+                    lastBackMs = now
+                    android.widget.Toast.makeText(context, "Press back again to exit", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    // Fill the whole window (incl. behind the status/nav bars) with the app
+    // background; each screen applies its own status/nav insets. This stops the
+    // strip behind the gesture pill from showing the default window colour.
+    Box(Modifier.fillMaxSize().background(VoidBlack)) {
         PrismNavHost(
             navController = navController,
             playbackViewModel = playbackViewModel,
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 150.dp),
-            onOpenNowPlaying = { nowPlayingOpen = true }
+            contentPadding = PaddingValues(bottom = 64.dp),
+            onOpenNowPlaying = { nowPlayingOpen = true },
+            onOpenSettings = { settingsOpen = true },
+            onOpenPlaylist = { playlist ->
+                scope.launch {
+                    val songs = runCatching { graph.library.songsForPlaylist(playlist.id) }.getOrDefault(emptyList())
+                    songListTitle = playlist.name
+                    songListSongs = songs
+                    songListOpen = true
+                }
+            },
+            onOpenGenre = { genre ->
+                scope.launch {
+                    val songs = runCatching { graph.library.songsForGenre(genre) }.getOrDefault(emptyList())
+                    songListTitle = genre
+                    songListSongs = songs
+                    songListOpen = true
+                }
+            },
+            onOpenAllSongs = {
+                scope.launch {
+                    songListTitle = "all songs"
+                    songListSongs = emptyList()
+                    songListOpen = true
+                    songListSongs = runCatching { graph.library.allSongs() }.getOrDefault(emptyList())
+                }
+            }
         )
 
-        Column(
-            Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.navigationBars)
-                .padding(bottom = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            val playbackState by playbackViewModel.state.collectAsState()
-            MiniPlayer(
-                song = playbackState.current,
-                isPlaying = playbackState.isPlaying,
-                accent = seedColor(playbackState.current.artUrl),
-                onTogglePlay = playbackViewModel::togglePlay,
-                onSkipNext = playbackViewModel::skipNext,
-                onExpand = { nowPlayingOpen = true },
-                modifier = Modifier.height(68.dp)
-            )
+        val playbackState by playbackViewModel.state.collectAsState()
+        val currentArtUrl = playbackState.current?.artUrl
 
-            BottomNavBar(
-                currentRoute = currentRoute,
-                onSelect = { tab ->
-                    navController.navigate(tab.route) {
-                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                }
-            )
+        // Layer 1: Settings / SongLists / Login (bottom layer)
+        AnimatedVisibility(
+            visible = songListOpen,
+            enter = slideInVertically(tween(320)) { it } + fadeIn(tween(240)),
+            exit = slideOutVertically(tween(280)) { it } + fadeOut(tween(200))
+        ) {
+            GestureLayer {
+                SongListDetailScreen(
+                    title = songListTitle,
+                    songs = songListSongs,
+                    viewModel = playbackViewModel,
+                    onBack = { songListOpen = false }
+                )
+            }
         }
 
+        AnimatedVisibility(
+            visible = settingsOpen,
+            enter = slideInVertically(tween(320)) { it } + fadeIn(tween(240)),
+            exit = slideOutVertically(tween(280)) { it } + fadeOut(tween(200))
+        ) {
+            GestureLayer {
+                SettingsScreen(
+                    onBack = { settingsOpen = false },
+                    onOpenAccounts = { loginOpen = true }
+                )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = loginOpen,
+            enter = slideInVertically(tween(320)) { it } + fadeIn(tween(240)),
+            exit = slideOutVertically(tween(280)) { it } + fadeOut(tween(200))
+        ) {
+            GestureLayer {
+                LoginScreen(
+                    onBack = { loginOpen = false }
+                )
+            }
+        }
+
+        // Layer 2: Now Playing (above settings/songlists, below lyrics/eq/vis/queue)
         AnimatedVisibility(
             visible = nowPlayingOpen,
             enter = slideInVertically(tween(360)) { it } + fadeIn(tween(280)),
             exit = slideOutVertically(tween(300)) { it } + fadeOut(tween(220))
         ) {
-            NowPlayingScreen(viewModel = playbackViewModel, onCollapse = { nowPlayingOpen = false })
-        }
-    }
-}
-
-@Composable
-private fun BottomNavBar(currentRoute: String?, onSelect: (Tab) -> Unit) {
-    Box(
-        Modifier
-            .padding(horizontal = 16.dp)
-            .fillMaxWidth()
-            .height(64.dp)
-            .glassBar()
-    ) {
-        androidx.compose.foundation.layout.Row(
-            Modifier.fillMaxSize(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            tabs.forEach { tab ->
-                val selected = currentRoute == tab.route
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                ) {
-                    androidx.compose.material3.IconButton(onClick = { onSelect(tab) }) {
-                        Icon(
-                            tab.icon,
-                            contentDescription = tab.label,
-                            tint = if (selected) DefaultAccent else TextTertiary
-                        )
-                    }
-                }
+            GestureLayer {
+                NowPlayingScreen(
+                    viewModel = playbackViewModel,
+                    onCollapse = { nowPlayingOpen = false },
+                    onOpenLyrics = { lyricsOpen = true },
+                    onOpenEq = { eqOpen = true },
+                    onOpenVis = { visOpen = true },
+                    onOpenQueue = { queueOpen = true }
+                )
             }
         }
+
+        // Layer 3: Lyrics / EQ / Visualizer / Queue (top layer)
+        AnimatedVisibility(
+            visible = lyricsOpen,
+            enter = slideInVertically(tween(320)) { it } + fadeIn(tween(240)),
+            exit = slideOutVertically(tween(280)) { it } + fadeOut(tween(200))
+        ) {
+            GestureLayer {
+                LyricsScreen(
+                    viewModel = playbackViewModel,
+                    onBack = { lyricsOpen = false },
+                    artUrl = currentArtUrl
+                )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = eqOpen,
+            enter = slideInVertically(tween(320)) { it } + fadeIn(tween(240)),
+            exit = slideOutVertically(tween(280)) { it } + fadeOut(tween(200))
+        ) {
+            GestureLayer {
+                EqScreen(
+                    viewModel = playbackViewModel,
+                    onBack = { eqOpen = false },
+                    artUrl = currentArtUrl
+                )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = visOpen,
+            enter = slideInVertically(tween(320)) { it } + fadeIn(tween(240)),
+            exit = slideOutVertically(tween(280)) { it } + fadeOut(tween(200))
+        ) {
+            GestureLayer {
+                VisualizerScreen(
+                    viewModel = playbackViewModel,
+                    onBack = { visOpen = false },
+                    artUrl = currentArtUrl
+                )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = queueOpen,
+            enter = slideInVertically(tween(320)) { it } + fadeIn(tween(240)),
+            exit = slideOutVertically(tween(280)) { it } + fadeOut(tween(200))
+        ) {
+            GestureLayer {
+                QueueScreen(
+                    viewModel = playbackViewModel,
+                    onBack = { queueOpen = false }
+                )
+            }
+        }
+        val fullPlayerOpen = nowPlayingOpen || lyricsOpen || eqOpen || visOpen || queueOpen
+        playbackState.current?.let { current ->
+            AnimatedVisibility(
+                visible = !fullPlayerOpen,
+                enter = fadeIn(tween(200)),
+                exit = fadeOut(tween(160)),
+                modifier = Modifier.align(Alignment.BottomCenter)
+            ) {
+                MiniPlayer(
+                    song = current,
+                    isPlaying = playbackState.isPlaying,
+                    accent = seedColor(current.artUrl),
+                    onTogglePlay = playbackViewModel::togglePlay,
+                    onSkipNext = playbackViewModel::skipNext,
+                    onExpand = { nowPlayingOpen = true },
+                    modifier = Modifier.fillMaxWidth().navigationBarsPadding()
+                )
+            }
+        }
+
+        // App-level song actions sheet (add to playlist / queue / like …).
+        SongActionsHost(playbackViewModel)
     }
 }
 
+/**
+ * Wraps a full-screen overlay so it fully absorbs touches: a transparent
+ * catcher sits *behind* the overlay's own content and consumes any pointer
+ * events the content didn't handle. Without this, taps/drags on the overlay's
+ * empty areas fell through to whatever screen was underneath (e.g. swiping down
+ * in Lyrics was reaching Now Playing's collapse gesture).
+ */
+@Composable
+private fun GestureLayer(content: @Composable () -> Unit) {
+    Box(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .matchParentSize()
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            awaitPointerEvent().changes.forEach { it.consume() }
+                        }
+                    }
+                }
+        )
+        content()
+    }
+}

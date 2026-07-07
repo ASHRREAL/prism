@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Favorite
@@ -19,7 +18,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -51,9 +49,9 @@ fun AlbumCard(album: Album, onClick: () -> Unit, modifier: Modifier = Modifier) 
 }
 
 @Composable
-fun ArtistCircle(artist: Artist, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun ArtistTile(artist: Artist, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Column(modifier = modifier.width(108.dp).clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
-        Artwork(seed = artist.imageUrl, modifier = Modifier.size(96.dp).clip(CircleShape), cornerRadius = 999)
+        Artwork(seed = artist.imageUrl, modifier = Modifier.size(96.dp))
         Text(
             artist.name,
             style = MaterialTheme.typography.bodyMedium,
@@ -116,7 +114,7 @@ fun SongCard(song: Song, onClick: () -> Unit, modifier: Modifier = Modifier) {
 @Composable
 fun GenreChip(name: String, count: Int, onClick: () -> Unit, modifier: Modifier = Modifier) {
     GlassSurface(
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(0.dp),
         modifier = modifier.clickable(onClick = onClick)
     ) {
         Column(Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {

@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -24,11 +25,16 @@ import kotlin.math.sin
  * Slow-moving layered waves + radial glow behind an accent color, echoing the
  * floating-glass Windows Phone hub reference: deep base, soft top-light,
  * three translucent wave layers drifting at different speeds/depths.
+ *
+ * [drift] pans the bloom and wave phases sideways — feed it the panorama scroll
+ * position so the background moves slower than the content, the deepest layer
+ * of the WP-style parallax stack.
  */
 @Composable
 fun WaveBackground(
     accent: Color,
     modifier: Modifier = Modifier,
+    drift: Float = 0f,
     content: @Composable () -> Unit
 ) {
     val transition = rememberInfiniteTransition(label = "waves")
@@ -61,18 +67,19 @@ fun WaveBackground(
             )
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            // Soft top-left bloom, like light hitting glass.
+            // Soft top-left bloom, like light hitting glass. Slides gently
+            // against the scroll direction so the light source feels distant.
             drawRect(
                 brush = Brush.radialGradient(
                     colors = listOf(accent.copy(alpha = 0.35f), Color.Transparent),
-                    center = Offset(size.width * 0.15f, size.height * 0.05f),
+                    center = Offset(size.width * (0.15f - drift * 0.06f), size.height * 0.05f),
                     radius = size.width * 0.9f
                 )
             )
 
-            drawWaveLayer(phase1, mid.copy(alpha = 0.28f), amplitude = 46f, baseline = 0.62f)
-            drawWaveLayer(phase2, accent.copy(alpha = 0.20f), amplitude = 64f, baseline = 0.74f)
-            drawWaveLayer(phase3, Color.White.copy(alpha = 0.06f), amplitude = 28f, baseline = 0.83f)
+            drawWaveLayer(phase1 + drift * 0.45f, mid.copy(alpha = 0.28f), amplitude = 46f, baseline = 0.62f)
+            drawWaveLayer(phase2 + drift * 0.30f, accent.copy(alpha = 0.20f), amplitude = 64f, baseline = 0.74f)
+            drawWaveLayer(phase3 + drift * 0.70f, Color.White.copy(alpha = 0.06f), amplitude = 28f, baseline = 0.83f)
         }
         content()
     }

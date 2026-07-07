@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "refui",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8341", "--directory", "/tmp/claude-1000/-home-ash-Documents-Codes-music-player/961ec301-538e-4748-bec3-99143823239a/scratchpad/refui"],
+      "port": 8341
+    }
+  ]
+}
