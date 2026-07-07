@@ -2,6 +2,8 @@ package com.prism.muse.playback
 
 import android.app.PendingIntent
 import android.content.Intent
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
@@ -16,7 +18,7 @@ class PlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
-        val player: Player = PrismApp.graph(this).player.player
+        val player = PrismApp.graph(this).player.player
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
@@ -30,15 +32,11 @@ class PlaybackService : MediaSessionService() {
             .build()
     }
 
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
-        return mediaSession
-    }
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? =
+        mediaSession
 
     override fun onDestroy() {
-        mediaSession?.run {
-            player.stop()
-            release()
-        }
+        mediaSession?.release()
         mediaSession = null
         super.onDestroy()
     }
