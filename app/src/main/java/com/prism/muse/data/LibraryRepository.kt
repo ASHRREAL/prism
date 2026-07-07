@@ -282,8 +282,12 @@ class LibraryRepository(
     }
 
     fun deleteDownload(songId: String) {
-        localFile(songId).delete()
+        cancelDownload(songId)
+        runCatching { localFile(songId).delete() }
+        runCatching { File(downloadDir, "$songId.audio").delete() }
+        runCatching { File(downloadDir, "$songId.part").delete() }
         _downloaded.value = _downloaded.value.filterNot { it.id == songId }
+        _downloadProgress.value = _downloadProgress.value - songId
     }
 
     fun downloadsSizeBytes(): Long =
