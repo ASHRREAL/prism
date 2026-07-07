@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.prism.muse.PrismApp
+import com.prism.muse.PlaylistActions
 import com.prism.muse.data.model.Album
 import com.prism.muse.data.model.Artist
 import com.prism.muse.data.model.Genre
@@ -253,9 +254,6 @@ private fun ArtistsPanel(artists: List<Artist>, onArtistClick: (Artist) -> Unit,
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PlaylistsPanel(playlists: List<Playlist>, onPlaylistClick: (Playlist) -> Unit, bottomPad: Dp) {
-    val scope = rememberCoroutineScope()
-    val context = LocalContext.current
-
     LazyColumn(contentPadding = PaddingValues(bottom = bottomPad)) {
         items(playlists, key = { it.id }) { playlist ->
             Row(
@@ -276,37 +274,6 @@ private fun PlaylistsPanel(playlists: List<Playlist>, onPlaylistClick: (Playlist
             HairlineDivider()
         }
     }
-
-    // Bottom sheet for playlist actions
-    val target = PlaylistActions.current
-    if (target != null) {
-        Box(
-            Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)).clickable { PlaylistActions.hide() },
-            contentAlignment = Alignment.BottomCenter
-        ) {
-            Column(
-                Modifier.fillMaxWidth().background(VoidBlack).navigationBarsPadding().padding(24.dp)
-            ) {
-                Text(target.name, style = MaterialTheme.typography.titleMedium, color = TextPrimary)
-                HairlineDivider(Modifier.padding(vertical = 12.dp))
-                Text("delete playlist", style = SectionHeader.copy(fontSize = 22.sp), color = Color(0xFFD32F2F),
-                    modifier = Modifier.fillMaxWidth().clickable {
-                        val p = target
-                        PlaylistActions.hide()
-                        scope.launch { PrismApp.graph(context).library.deletePlaylist(p.id) }
-                    }.padding(vertical = 12.dp))
-                Text("cancel", style = SectionHeader.copy(fontSize = 22.sp), color = TextTertiary,
-                    modifier = Modifier.fillMaxWidth().clickable { PlaylistActions.hide() }.padding(vertical = 12.dp))
-            }
-        }
-    }
-}
-
-object PlaylistActions {
-    var current by mutableStateOf<Playlist?>(null)
-        private set
-    fun show(playlist: Playlist) { current = playlist }
-    fun hide() { current = null }
 }
 
 @Composable

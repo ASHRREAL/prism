@@ -13,11 +13,18 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Text
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -30,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.rememberNavController
 import com.prism.muse.playback.PlaybackViewModel
@@ -45,12 +53,16 @@ import com.prism.muse.ui.screens.queue.QueueScreen
 import com.prism.muse.ui.screens.settings.SettingsScreen
 import com.prism.muse.ui.screens.login.LoginScreen
 import com.prism.muse.ui.screens.songlist.SongListDetailScreen
+import com.prism.muse.ui.components.HairlineDivider
 import com.prism.muse.ui.theme.PrismMuseTheme
 import com.prism.muse.ui.theme.VoidBlack
 import com.prism.muse.ui.theme.ProvideAccent
 import com.prism.muse.ui.theme.accentColorByName
-import com.prism.muse.ui.components.seedColor
+import com.prism.muse.ui.theme.SectionHeader
+import com.prism.muse.ui.theme.TextPrimary
+import com.prism.muse.ui.theme.TextTertiary
 import com.prism.muse.data.model.Song
+import com.prism.muse.data.model.Playlist
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -309,8 +321,45 @@ private fun PrismApp(playbackViewModel: PlaybackViewModel) {
 
         // App-level song actions sheet (add to playlist / queue / like …).
         SongActionsHost(playbackViewModel)
+
+        // Playlist actions (delete) bottom sheet
+        PlaylistActionsHost()
     }
     } // Close ProvideAccent
+}
+
+object PlaylistActions {
+    var current by mutableStateOf<Playlist?>(null)
+        private set
+    fun show(p: Playlist) { current = p }
+    fun hide() { current = null }
+}
+
+@Composable
+private fun PlaylistActionsHost() {
+    val pl = PlaylistActions.current ?: return
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    Box(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f))
+            .pointerInput(Unit) { detectTapGestures { PlaylistActions.hide() } }
+        )
+        Column(
+            Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(VoidBlack)
+                .navigationBarsPadding().padding(24.dp)
+        ) {
+            Text(pl.name, style = androidx.compose.material3.MaterialTheme.typography.titleMedium, color = TextPrimary)
+            HairlineDivider(Modifier.padding(vertical = 12.dp))
+            Text("delete playlist", style = SectionHeader.copy(fontSize = 22.sp), color = Color(0xFFD32F2F),
+                modifier = Modifier.fillMaxWidth().clickable {
+                    PlaylistActions.hide()
+                    scope.launch { PrismApp.graph(ctx).library.deletePlaylist(pl.id) }
+                }.padding(vertical = 12.dp))
+            Text("cancel", style = SectionHeader.copy(fontSize = 22.sp), color = TextTertiary,
+                modifier = Modifier.fillMaxWidth().clickable { PlaylistActions.hide() }.padding(vertical = 12.dp))
+        }
+    }
 }
 
 /**

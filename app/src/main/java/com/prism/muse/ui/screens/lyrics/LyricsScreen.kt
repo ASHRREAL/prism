@@ -108,7 +108,7 @@ fun LyricsScreen(
     val listState = rememberLazyListState()
     LaunchedEffect(activeIndex) {
         if (activeIndex >= 0) {
-            listState.animateScrollToItem((activeIndex - 1).coerceAtLeast(0), scrollOffset = 0)
+            listState.scrollToItem((activeIndex - 1).coerceAtLeast(0))
         }
     }
 
@@ -229,11 +229,7 @@ fun LyricsScreen(
                     ) {
                         itemsIndexed(current.lines) { index, line ->
                             val active = index == activeIndex
-                            val fontSize by animateFloatAsState(
-                                if (active) 26f else 20f,
-                                tween(200),
-                                label = "lineSize"
-                            )
+                            val fontSize = if (active) 26f else 20f
                             val baseStyle = MaterialTheme.typography.titleLarge.copy(
                                 fontSize = fontSize.sp,
                                 fontWeight = if (active) FontWeight.Medium else FontWeight.Light,
