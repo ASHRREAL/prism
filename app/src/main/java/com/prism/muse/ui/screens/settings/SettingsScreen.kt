@@ -296,18 +296,13 @@ fun SettingsScreen(
                 mutableStateListOf<String>().also { it.addAll(tabOrder) }
             }
             var draggedTabName by remember { mutableStateOf<String?>(null) }
-            var dragStartTabIdx by remember { mutableIntStateOf(-1) }
-            var totalTabDragY by remember { mutableFloatStateOf(0f) }
+            var draggedStartTabIdx by remember { mutableIntStateOf(-1) }
+            var tabDragAccum by remember { mutableFloatStateOf(0f) }
             val tabRowHeightPx = with(LocalDensity.current) { 56.dp.toPx() }
 
             liveTabs.forEachIndexed { idx, tab ->
                 val shown = tab in visibleTabs
                 val dragging = draggedTabName == tab
-                // Visual offset: total drag minus how many positions we've moved
-                val visualOffset = if (dragging) {
-                    val cur = liveTabs.indexOf(tab)
-                    if (cur >= 0) totalTabDragY - (cur - dragStartTabIdx) * tabRowHeightPx else 0f
-                } else 0f
 
                 fun toggle() {
                     val current = visibleTabs.toMutableSet()
@@ -317,7 +312,7 @@ fun SettingsScreen(
 
                 Column(
                     Modifier.graphicsLayer {
-                        translationY = visualOffset
+                        translationY = if (dragging) tabDragAccum else 0f
                         scaleX = if (dragging) 1.03f else 1f
                         scaleY = if (dragging) 1.03f else 1f
                     }
@@ -350,30 +345,28 @@ fun SettingsScreen(
                                     detectVerticalDragGestures(
                                         onDragStart = {
                                             draggedTabName = tab
-                                            dragStartTabIdx = liveTabs.indexOf(tab)
-                                            totalTabDragY = 0f
+                                            draggedStartTabIdx = liveTabs.indexOf(tab)
+                                            tabDragAccum = 0f
                                         },
                                         onDragEnd = {
-                                            draggedTabName = null; totalTabDragY = 0f
+                                            draggedTabName = null; tabDragAccum = 0f
                                             prefs.setTabOrder(liveTabs.toList())
                                         },
                                         onDragCancel = {
-                                            draggedTabName = null; totalTabDragY = 0f
+                                            draggedTabName = null; tabDragAccum = 0f
                                             prefs.setTabOrder(liveTabs.toList())
                                         }
                                     ) { change, dy ->
                                         change.consume()
-                                        totalTabDragY += dy
-                                        // Swap inside gesture handler, not composition
-                                        val ci = liveTabs.indexOf(tab)
-                                        if (ci >= 0) {
-                                            val off = totalTabDragY - (ci - dragStartTabIdx) * tabRowHeightPx
-                                            if (kotlin.math.abs(off) > tabRowHeightPx * 0.5f) {
-                                                val dir = if (off > 0) 1 else -1
-                                                val target = (ci + dir).coerceIn(0, liveTabs.lastIndex)
-                                                if (target != ci) {
-                                                    liveTabs[ci] = liveTabs[target].also { liveTabs[target] = liveTabs[ci] }
-                                                }
+                                        tabDragAccum += dy
+                                        // Swap if accumulated drag passes half a row height
+                                        val i = liveTabs.indexOf(tab)
+                                        if (i >= 0 && kotlin.math.abs(tabDragAccum) > tabRowHeightPx * 0.5f) {
+                                            val dir = if (tabDragAccum > 0) 1 else -1
+                                            val target = (i + dir).coerceIn(0, liveTabs.lastIndex)
+                                            if (target != i) {
+                                                liveTabs[i] = liveTabs[target].also { liveTabs[target] = liveTabs[i] }
+                                                tabDragAccum = 0f
                                             }
                                         }
                                     }

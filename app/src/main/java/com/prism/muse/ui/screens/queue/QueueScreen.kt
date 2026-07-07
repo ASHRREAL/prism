@@ -80,26 +80,30 @@ fun QueueScreen(viewModel: PlaybackViewModel, onBack: () -> Unit) {
     val density = LocalDensity.current
 
     val queueList = remember(state.queue) {
-        mutableStateListOf<Song>().also { it.addAll(state.queue.toList()) }
+        val q = state.queue.toList()
+        mutableStateListOf<Song>().also { it.addAll(q) }
     }
     val safeCurrentIndex = state.currentIndex.coerceIn(0, (queueList.size - 1).coerceAtLeast(0))
     val listState = rememberLazyListState()
     var draggedId by remember { mutableStateOf<String?>(null) }
-    var totalDragY by remember { mutableFloatStateOf(0f) }
-    var dragStartIdx by remember { mutableIntStateOf(-1) }
+    var draggedStartIdx by remember { mutableIntStateOf(-1) }
+    var dragAccumY by remember { mutableFloatStateOf(0f) }
     val rowHeightPx = with(density) { 72.dp.toPx() }
 
     PlayerBackdrop(artUrl = state.current?.artUrl) {
-        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()
-            .pointerInput(Unit) {
-                var down = 0f
-                detectVerticalDragGestures(
-                    onDragEnd = { if (down > 60f) onBack(); down = 0f },
-                    onDragCancel = { down = 0f }
-                ) { _, dy -> down += dy }
-            }
+        Column(
+            Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()
+                .pointerInput(Unit) {
+                    var down = 0f
+                    detectVerticalDragGestures(
+                        onDragEnd = { if (down > 60f) onBack(); down = 0f },
+                        onDragCancel = { down = 0f }
+                    ) { _, dy -> down += dy }
+                }
         ) {
-            Row(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Row(Modifier.clickable(onClick = onBack), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Rounded.KeyboardArrowDown, "Now playing", tint = TextSecondary, modifier = Modifier.size(16.dp))
                     Text("now playing", style = MaterialTheme.typography.bodyMedium, color = TextSecondary, modifier = Modifier.padding(start = 4.dp))
@@ -107,60 +111,84 @@ fun QueueScreen(viewModel: PlaybackViewModel, onBack: () -> Unit) {
                 Spacer(Modifier.weight(1f))
                 Text("SAVE", style = TrackedLabel.copy(fontSize = 11.sp, letterSpacing = 1.sp), color = TextSecondary,
                     modifier = Modifier.clickable {
-                        if (state.queue.isNotEmpty()) scope.launch {
-                            library.createPlaylist("Queue " + nowStamp(), state.queue)
+                        val q = state.queue
+                        if (q.isNotEmpty()) scope.launch {
+                            library.createPlaylist("Queue " + nowStamp(), q)
                             android.widget.Toast.makeText(ctx, "playlist saved", android.widget.Toast.LENGTH_SHORT).show()
                         }
-                    })
+                    }
+                )
             }
+
             Text("up next", style = HubTitle.copy(fontSize = 48.sp, lineHeight = 52.sp), color = TextPrimary,
                 modifier = Modifier.padding(start = 22.dp, top = 2.dp, bottom = 6.dp))
 
-            LazyColumn(state = listState, modifier = Modifier.weight(1f).pointerInput(Unit) {
-                var down = 0f
-                detectVerticalDragGestures(
-                    onDragEnd = { if (down > 80f) onBack(); down = 0f },
-                    onDragCancel = { down = 0f }
-                ) { _, dy -> down += dy }
-            }, contentPadding = PaddingValues(start = 22.dp, end = 22.dp, bottom = 12.dp)) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.weight(1f).pointerInput(Unit) {
+                    var down = 0f
+                    detectVerticalDragGestures(
+                        onDragEnd = { if (down > 80f) onBack(); down = 0f },
+                        onDragCancel = { down = 0f }
+                    ) { _, dy -> down += dy }
+                },
+                contentPadding = PaddingValues(start = 22.dp, end = 22.dp, bottom = 12.dp)
+            ) {
+                // Key includes the position: the same song can legitimately sit in
+                // the queue twice ("add to queue" twice), and duplicate LazyColumn
+                // keys crash with IllegalArgumentException.
                 itemsIndexed(queueList.drop(safeCurrentIndex), key = { i, s -> "${i + safeCurrentIndex}:${s.id}" }) { idxShown, song ->
                     val realIdx = idxShown + safeCurrentIndex
                     val isCurrent = song.id == currentId
                     val isDragging = draggedId == song.id
 
-                    val dragOff = if (isDragging) {
-                        val cur = queueList.indexOfFirst { it.id == song.id }
-                        if (cur >= 0) totalDragY - (cur - dragStartIdx) * rowHeightPx else 0f
-                    } else 0f
-
                     if (isCurrent) {
-                        QueueRow(song, true, accent, onClick = { viewModel.playAt(realIdx) })
+                        QueueRow(song, isCurrent = true, accent = accent, onClick = { viewModel.playAt(realIdx) })
                     } else {
                         val dismiss = rememberSwipeToDismissBoxState(confirmValueChange = { v ->
-                            if (v == SwipeToDismissBoxValue.EndToStart) { viewModel.removeFromQueue(song); queueList.remove(song); true } else false
+                            if (v == SwipeToDismissBoxValue.EndToStart) {
+                                viewModel.removeFromQueue(song); queueList.remove(song); true
+                            } else false
                         })
                         SwipeToDismissBox(state = dismiss, enableDismissFromStartToEnd = false,
-                            backgroundContent = { Box(Modifier.fillMaxSize().background(Color(0xFFD32F2F))) }
+                            backgroundContent = {
+                                val bg by animateColorAsState(
+                                    if (dismiss.targetValue == SwipeToDismissBoxValue.EndToStart) Color(0xFFD32F2F) else Color.Transparent,
+                                    label = "swipeBg"
+                                )
+                                Box(Modifier.fillMaxSize().background(
+                                    Brush.horizontalGradient(listOf(Color.Transparent, bg))
+                                ))
+                            }
                         ) {
                             Box {
-                                QueueRow(song, false, accent, onClick = { viewModel.playAt(realIdx) },
-                                    isDragging = isDragging, dragOffset = dragOff,
-                                    onDragStart = { draggedId = song.id; dragStartIdx = queueList.indexOfFirst { it.id == song.id }; totalDragY = 0f },
+                                QueueRow(
+                                    song = song, isCurrent = false, accent = accent,
+                                    onClick = { viewModel.playAt(realIdx) },
+                                    isDragging = isDragging,
+                                    dragOffset = if (isDragging) dragAccumY else 0f,
+                                    onDragStart = {
+                                        draggedId = song.id
+                                        draggedStartIdx = queueList.indexOfFirst { it.id == song.id }
+                                        dragAccumY = 0f
+                                    },
                                     onDrag = { dy ->
-                                        totalDragY += dy
-                                        val ci = queueList.indexOfFirst { it.id == song.id }
-                                        if (ci >= 0) {
-                                            val off = totalDragY - (ci - dragStartIdx) * rowHeightPx
-                                            if (kotlin.math.abs(off) > rowHeightPx * 0.5f) {
-                                                val dir = if (off > 0) 1 else -1
-                                                val target = (ci + dir).coerceIn(0, queueList.lastIndex)
-                                                if (target != ci && target != state.currentIndex) {
-                                                    queueList[ci] = queueList[target].also { queueList[target] = queueList[ci] }
+                                        dragAccumY += dy
+                                        // Swap inside gesture handler, not in composable body
+                                        val i = queueList.indexOfFirst { it.id == song.id }
+                                        if (i >= 0 && i != safeCurrentIndex) {
+                                            if (kotlin.math.abs(dragAccumY) > rowHeightPx * 0.5f) {
+                                                val dir = if (dragAccumY > 0) 1 else -1
+                                                val target = (i + dir).coerceIn(0, queueList.lastIndex)
+                                                if (target != i && target != safeCurrentIndex) {
+                                                    queueList[i] = queueList[target].also { queueList[target] = queueList[i] }
+                                                    dragAccumY = 0f
                                                 }
                                             }
                                         }
                                     },
-                                    onDragEnd = { draggedId = null; totalDragY = 0f })
+                                    onDragEnd = { draggedId = null; dragAccumY = 0f }
+                                )
                             }
                         }
                     }
@@ -172,11 +200,13 @@ fun QueueScreen(viewModel: PlaybackViewModel, onBack: () -> Unit) {
                 }
             }
 
-            Row(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 14.dp, bottom = 24.dp), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+            Row(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 14.dp, bottom = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(28.dp)
+            ) {
                 Text("shuffle", style = SectionHeader.copy(fontSize = 18.sp), color = TextPrimary,
                     modifier = Modifier.clickable { viewModel.shuffleQueue() })
                 Text("clear", style = SectionHeader.copy(fontSize = 18.sp), color = TextSecondary,
-                    modifier = Modifier.clickable { state.current?.let { viewModel.playQueue(listOf(it), 0) } })
+                    modifier = Modifier.clickable { viewModel.clearUpcoming() })
             }
         }
     }
@@ -184,23 +214,30 @@ fun QueueScreen(viewModel: PlaybackViewModel, onBack: () -> Unit) {
 
 private fun nowStamp(): String {
     val c = java.util.Calendar.getInstance()
-    return "%02d/%02d %02d:%02d".format(c.get(java.util.Calendar.MONTH) + 1, c.get(java.util.Calendar.DAY_OF_MONTH), c.get(java.util.Calendar.HOUR_OF_DAY), c.get(java.util.Calendar.MINUTE))
+    return "%02d/%02d %02d:%02d".format(c.get(java.util.Calendar.MONTH) + 1, c.get(java.util.Calendar.DAY_OF_MONTH),
+        c.get(java.util.Calendar.HOUR_OF_DAY), c.get(java.util.Calendar.MINUTE))
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun QueueRow(
     song: Song, isCurrent: Boolean, accent: Color, onClick: () -> Unit,
-    isDragging: Boolean = false, dragOffset: Float = 0f,
-    onDragStart: (() -> Unit)? = null, onDrag: ((Float) -> Unit)? = null, onDragEnd: (() -> Unit)? = null
+    isDragging: Boolean = false,
+    dragOffset: Float = 0f,
+    onDragStart: (() -> Unit)? = null,
+    onDrag: ((Float) -> Unit)? = null,
+    onDragEnd: (() -> Unit)? = null
 ) {
     Column {
         Row(
-            Modifier.fillMaxWidth().graphicsLayer {
-                translationY = dragOffset
-                scaleX = if (isDragging) 1.04f else 1f
-                scaleY = if (isDragging) 1.04f else 1f
-            }.combinedClickable(onClick = onClick, onLongClick = { SongActions.open(song, queueContext = true) }).padding(vertical = 12.dp),
+            Modifier.fillMaxWidth()
+                .graphicsLayer {
+                    translationY = dragOffset
+                    scaleX = if (isDragging) 1.04f else 1f
+                    scaleY = if (isDragging) 1.04f else 1f
+                }
+                .combinedClickable(onClick = onClick, onLongClick = { SongActions.open(song, queueContext = true) })
+                .padding(vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(Modifier.width(16.dp), contentAlignment = Alignment.Center) {
@@ -208,8 +245,10 @@ private fun QueueRow(
             }
             Artwork(seed = song.artUrl, modifier = Modifier.padding(start = 4.dp).size(48.dp))
             Column(Modifier.weight(1f).padding(start = 14.dp)) {
-                Text(song.title, style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp), color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(song.artist, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(song.title, style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp),
+                    color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(song.artist, style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Text("⋮⋮", color = TextTertiary, fontSize = 16.sp,
                 modifier = Modifier.pointerInput(Unit) {
@@ -217,8 +256,12 @@ private fun QueueRow(
                         onDragStart = { onDragStart?.invoke() },
                         onDragEnd = { onDragEnd?.invoke() },
                         onDragCancel = { onDragEnd?.invoke() }
-                    ) { change, dy -> change.consume(); onDrag?.invoke(dy) }
-                })
+                    ) { change, dy ->
+                        change.consume()
+                        onDrag?.invoke(dy)
+                    }
+                }
+            )
         }
         HairlineDivider()
     }

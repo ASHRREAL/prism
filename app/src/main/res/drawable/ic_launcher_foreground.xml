@@ -6,13 +6,6 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- faint circular ring -->
-    <path
-        android:pathData="M54,25 a29,29 0 1,0 0.01,0 z"
-        android:strokeColor="#38FFFFFF"
-        android:strokeWidth="1.6"
-        android:fillColor="#00000000" />
-
     <!-- cyan accent wedge tucked into the play's lower-left corner -->
     <path
         android:fillColor="#38A8E8"
