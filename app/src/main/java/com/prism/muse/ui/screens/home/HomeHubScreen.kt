@@ -255,7 +255,6 @@ private fun ArtistsPanel(artists: List<Artist>, onArtistClick: (Artist) -> Unit,
 private fun PlaylistsPanel(playlists: List<Playlist>, onPlaylistClick: (Playlist) -> Unit, bottomPad: Dp) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    var deleteTarget by remember { mutableStateOf<Playlist?>(null) }
 
     LazyColumn(contentPadding = PaddingValues(bottom = bottomPad)) {
         items(playlists, key = { it.id }) { playlist ->
@@ -263,7 +262,7 @@ private fun PlaylistsPanel(playlists: List<Playlist>, onPlaylistClick: (Playlist
                 Modifier.fillMaxWidth()
                     .combinedClickable(
                         onClick = { onPlaylistClick(playlist) },
-                        onLongClick = { deleteTarget = playlist }
+                        onLongClick = { PlaylistActions.show(playlist) }
                     )
                     .padding(vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -278,29 +277,36 @@ private fun PlaylistsPanel(playlists: List<Playlist>, onPlaylistClick: (Playlist
         }
     }
 
-    // Bottom sheet for delete confirmation
-    if (deleteTarget != null) {
+    // Bottom sheet for playlist actions
+    val target = PlaylistActions.current
+    if (target != null) {
         Box(
-            Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)).clickable { deleteTarget = null },
+            Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)).clickable { PlaylistActions.hide() },
             contentAlignment = Alignment.BottomCenter
         ) {
             Column(
                 Modifier.fillMaxWidth().background(VoidBlack).navigationBarsPadding().padding(24.dp)
-                    .clickable(enabled = false) { }
             ) {
-                Text(deleteTarget!!.name, style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+                Text(target.name, style = MaterialTheme.typography.titleMedium, color = TextPrimary)
                 HairlineDivider(Modifier.padding(vertical = 12.dp))
                 Text("delete playlist", style = SectionHeader.copy(fontSize = 22.sp), color = Color(0xFFD32F2F),
                     modifier = Modifier.fillMaxWidth().clickable {
-                        val p = deleteTarget!!
-                        deleteTarget = null
+                        val p = target
+                        PlaylistActions.hide()
                         scope.launch { PrismApp.graph(context).library.deletePlaylist(p.id) }
                     }.padding(vertical = 12.dp))
                 Text("cancel", style = SectionHeader.copy(fontSize = 22.sp), color = TextTertiary,
-                    modifier = Modifier.fillMaxWidth().clickable { deleteTarget = null }.padding(vertical = 12.dp))
+                    modifier = Modifier.fillMaxWidth().clickable { PlaylistActions.hide() }.padding(vertical = 12.dp))
             }
         }
     }
+}
+
+object PlaylistActions {
+    var current by mutableStateOf<Playlist?>(null)
+        private set
+    fun show(playlist: Playlist) { current = playlist }
+    fun hide() { current = null }
 }
 
 @Composable

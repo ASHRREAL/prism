@@ -79,8 +79,10 @@ fun QueueScreen(viewModel: PlaybackViewModel, onBack: () -> Unit) {
     val density = LocalDensity.current
 
     val queueList = remember(state.queue) {
-        mutableStateListOf<Song>().also { it.addAll(state.queue) }
+        val q = state.queue.toList()
+        mutableStateListOf<Song>().also { it.addAll(q) }
     }
+    val safeCurrentIndex = state.currentIndex.coerceIn(0, (queueList.size - 1).coerceAtLeast(0))
     val listState = rememberLazyListState()
     var draggedIndex by remember { mutableIntStateOf(-1) }
     var dragAccumY by remember { mutableFloatStateOf(0f) }
@@ -130,15 +132,15 @@ fun QueueScreen(viewModel: PlaybackViewModel, onBack: () -> Unit) {
                 },
                 contentPadding = PaddingValues(start = 22.dp, end = 22.dp, bottom = 12.dp)
             ) {
-                itemsIndexed(queueList.drop(state.currentIndex), key = { _, s -> s.id }) { idxShown, song ->
-                    val realIdx = idxShown + state.currentIndex
+                itemsIndexed(queueList.drop(safeCurrentIndex), key = { _, s -> s.id }) { idxShown, song ->
+                    val realIdx = idxShown + safeCurrentIndex
                     val isCurrent = song.id == currentId
                     val isDragging = draggedIndex == realIdx
 
                     if (isDragging && kotlin.math.abs(dragAccumY) > rowHeightPx * 0.5f) {
                         val dir = if (dragAccumY > 0) 1 else -1
                         val swapIdx = (realIdx + dir).coerceIn(0, queueList.lastIndex)
-                        if (swapIdx != realIdx && swapIdx != state.currentIndex) {
+                        if (swapIdx != realIdx && swapIdx != safeCurrentIndex) {
                             val tmp = queueList[realIdx]
                             queueList[realIdx] = queueList[swapIdx]
                             queueList[swapIdx] = tmp

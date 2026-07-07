@@ -24,7 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.setValue
@@ -74,7 +74,7 @@ fun VisualizerScreen(
 
     // Beat-synced pulse
     val beat = remember(pos) { (1f + sin(pos * PI.toFloat() / 2f) * 0.3f).coerceIn(0.5f, 1.5f) }
-    var vizMode by remember { mutableIntStateOf(0) }
+    var vizMode by remember { mutableStateOf(0) }
     val modes = listOf("bars", "waves", "circles")
 
     PlayerBackdrop(artUrl = artUrl) {
@@ -129,11 +129,9 @@ fun VisualizerScreen(
 
             // Main visualization canvas
             Canvas(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .padding(horizontal = 22.dp, vertical = 16.dp)
+                modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = 22.dp, vertical = 16.dp)
             ) {
+                if (size.width <= 0f || size.height <= 0f) return@Canvas
                 val w = size.width
                 val h = size.height
                 val centerY = h / 2
@@ -174,10 +172,11 @@ fun VisualizerScreen(
                         val rings = 6
                         val maxR = minOf(w, h) * 0.35f
                         for (r in rings downTo 1) {
-                            val rad = maxR * r / rings * (0.7f + 0.3f * sin(phase1 + r * 0.7f) * beat)
-                            drawCircle(accent.copy(alpha = 0.25f / r), rad, Offset(w / 2, centerY), style = Stroke(3f * r / rings, cap = StrokeCap.Round))
+                            val rad = maxR * r.toFloat() / rings.toFloat() * (0.7f + 0.3f * sin(phase1 + r * 0.7f) * beat)
+                            drawCircle(accent.copy(alpha = (0.25f / r).coerceAtMost(1f)), rad, Offset(w / 2, centerY),
+                                style = Stroke((3f * r / rings).coerceAtLeast(1f), cap = StrokeCap.Round))
                         }
-                        drawCircle(accent.copy(alpha = 0.5f * beat), 8f, Offset(w / 2, centerY))
+                        drawCircle(accent.copy(alpha = (0.5f * beat).coerceIn(0f, 1f)), 8f, Offset(w / 2, centerY))
                     }
                 }
             }
