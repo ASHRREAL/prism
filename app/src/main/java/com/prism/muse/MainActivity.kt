@@ -372,17 +372,7 @@ private fun PlaylistActionsHost() {
 @Composable
 private fun GestureLayer(content: @Composable () -> Unit) {
     Box(Modifier.fillMaxSize()) {
-        Box(
-            Modifier
-                .matchParentSize()
-                .pointerInput(Unit) {
-                    awaitPointerEventScope {
-                        while (true) {
-                            awaitPointerEvent().changes.forEach { it.consume() }
-                        }
-                    }
-                }
-        )
+        Box(Modifier.matchParentSize().clickable(enabled = false) { })
         content()
     }
 }

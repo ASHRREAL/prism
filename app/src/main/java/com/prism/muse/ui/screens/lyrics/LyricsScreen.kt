@@ -108,7 +108,7 @@ fun LyricsScreen(
     val listState = rememberLazyListState()
     LaunchedEffect(activeIndex) {
         if (activeIndex >= 0) {
-            listState.scrollToItem((activeIndex - 1).coerceAtLeast(0))
+            listState.animateScrollToItem((activeIndex - 1).coerceAtLeast(0), scrollOffset = 0)
         }
     }
 

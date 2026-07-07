@@ -2,8 +2,7 @@ package com.prism.muse.ui.screens.visualizer
 
 import android.media.audiofx.Visualizer
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -80,24 +79,31 @@ fun VisualizerScreen(
             Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()
                 .pointerInput(Unit) {
                     var down = 0f
-                    detectVerticalDragGestures(
-                        onDragEnd = { if (down > 60f) onBack(); down = 0f },
-                        onDragCancel = { down = 0f }
-                    ) { _, dy -> down += dy }
-                }
-                .pointerInput(Unit) {
                     var right = 0f
-                    detectHorizontalDragGestures(
-                        onDragEnd = { if (right > 100f) onBack(); right = 0f },
-                        onDragCancel = { right = 0f }
-                    ) { _, dx -> right += dx }
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull() ?: continue
+                            if (change.pressed) {
+                                val dx = change.position.x - change.previousPosition.x
+                                val dy = change.position.y - change.previousPosition.y
+                                down += dy
+                                right += dx
+                            } else {
+                                if (down > 60f) onBack()
+                                else if (right > 100f) onBack()
+                                down = 0f
+                                right = 0f
+                            }
+                        }
+                    }
                 }
         ) {
             Row(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("‹ now playing", style = MaterialTheme.typography.bodyMedium, color = TextSecondary,
-                    modifier = Modifier.padding(end = 14.dp))
+                    modifier = Modifier.clickable { onBack() }.padding(end = 14.dp))
             }
             Text("visualizer", style = HubTitle.copy(fontSize = 48.sp, lineHeight = 52.sp), color = TextPrimary,
                 modifier = Modifier.padding(start = 22.dp, top = 2.dp, bottom = 6.dp))
