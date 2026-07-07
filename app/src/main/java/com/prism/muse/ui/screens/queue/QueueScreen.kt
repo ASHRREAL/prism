@@ -37,6 +37,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -84,7 +85,8 @@ fun QueueScreen(viewModel: PlaybackViewModel, onBack: () -> Unit) {
     }
     val safeCurrentIndex = state.currentIndex.coerceIn(0, (queueList.size - 1).coerceAtLeast(0))
     val listState = rememberLazyListState()
-    var draggedIndex by remember { mutableIntStateOf(-1) }
+    var draggedId by remember { mutableStateOf<String?>(null) }
+    var draggedStartIdx by remember { mutableIntStateOf(-1) }
     var dragAccumY by remember { mutableFloatStateOf(0f) }
     val rowHeightPx = with(density) { 72.dp.toPx() }
 
@@ -138,7 +140,24 @@ fun QueueScreen(viewModel: PlaybackViewModel, onBack: () -> Unit) {
                 itemsIndexed(queueList.drop(safeCurrentIndex), key = { i, s -> "${i + safeCurrentIndex}:${s.id}" }) { idxShown, song ->
                     val realIdx = idxShown + safeCurrentIndex
                     val isCurrent = song.id == currentId
-                    val isDragging = draggedIndex == realIdx
+                    val isDragging = draggedId == song.id
+
+                    if (isDragging) {
+                        // Find current index of the dragged song in the list
+                        val curIdx = queueList.indexOfFirst { it.id == song.id }
+                        if (curIdx >= 0) {
+                            val totalOffset = dragAccumY + (curIdx - draggedStartIdx) * rowHeightPx
+                            if (kotlin.math.abs(totalOffset) > rowHeightPx * 0.5f) {
+                                val dir = if (totalOffset > 0) 1 else -1
+                                val target = (curIdx + dir).coerceIn(0, queueList.lastIndex)
+                                if (target != curIdx && target != safeCurrentIndex) {
+                                    queueList[curIdx] = queueList[target].also { queueList[target] = queueList[curIdx] }
+                                    // Reset accumulated offset for the new position but keep draggedId same
+                                    dragAccumY = 0f
+                                }
+                            }
+                        }
+                    }
 
                     if (isCurrent) {
                         QueueRow(song, isCurrent = true, accent = accent, onClick = { viewModel.playAt(realIdx) })
@@ -165,23 +184,13 @@ fun QueueScreen(viewModel: PlaybackViewModel, onBack: () -> Unit) {
                                     onClick = { viewModel.playAt(realIdx) },
                                     isDragging = isDragging,
                                     dragOffset = if (isDragging) dragAccumY else 0f,
-                                    onDragStart = { draggedIndex = realIdx; dragAccumY = 0f },
-                                    onDrag = { dy ->
-                                        dragAccumY += dy
-                                        val i = realIdx
-                                        if (i >= 0 && kotlin.math.abs(dragAccumY) > rowHeightPx * 0.5f) {
-                                            val dir = if (dragAccumY > 0) 1 else -1
-                                            val swapIdx = (i + dir).coerceIn(0, queueList.lastIndex)
-                                            if (swapIdx != i && swapIdx != safeCurrentIndex) {
-                                                val tmp = queueList[i]
-                                                queueList[i] = queueList[swapIdx]
-                                                queueList[swapIdx] = tmp
-                                                draggedIndex = swapIdx
-                                                dragAccumY -= dir * rowHeightPx
-                                            }
-                                        }
+                                    onDragStart = {
+                                        draggedId = song.id
+                                        draggedStartIdx = queueList.indexOfFirst { it.id == song.id }
+                                        dragAccumY = 0f
                                     },
-                                    onDragEnd = { draggedIndex = -1; dragAccumY = 0f }
+                                    onDrag = { dy -> dragAccumY += dy },
+                                    onDragEnd = { draggedId = null; dragAccumY = 0f }
                                 )
                             }
                         }

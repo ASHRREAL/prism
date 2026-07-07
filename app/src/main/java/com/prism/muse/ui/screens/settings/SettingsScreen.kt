@@ -295,13 +295,30 @@ fun SettingsScreen(
             val liveTabs = remember(tabOrder) {
                 mutableStateListOf<String>().also { it.addAll(tabOrder) }
             }
-            var draggedTab by remember { mutableIntStateOf(-1) }
+            var draggedTabName by remember { mutableStateOf<String?>(null) }
+            var draggedStartTabIdx by remember { mutableIntStateOf(-1) }
             var tabDragAccum by remember { mutableFloatStateOf(0f) }
             val tabRowHeightPx = with(LocalDensity.current) { 56.dp.toPx() }
 
             liveTabs.forEachIndexed { idx, tab ->
                 val shown = tab in visibleTabs
-                val dragging = draggedTab == idx
+                val dragging = draggedTabName == tab
+
+                if (dragging) {
+                    val curIdx = liveTabs.indexOf(tab)
+                    if (curIdx >= 0) {
+                        val totalOffset = tabDragAccum + (curIdx - draggedStartTabIdx) * tabRowHeightPx
+                        if (kotlin.math.abs(totalOffset) > tabRowHeightPx * 0.5f) {
+                            val dir = if (totalOffset > 0) 1 else -1
+                            val target = (curIdx + dir).coerceIn(0, liveTabs.lastIndex)
+                            if (target != curIdx) {
+                                val moved = liveTabs.removeAt(curIdx)
+                                liveTabs.add(target, moved)
+                                tabDragAccum = 0f
+                            }
+                        }
+                    }
+                }
 
                 fun toggle() {
                     val current = visibleTabs.toMutableSet()
@@ -343,31 +360,21 @@ fun SettingsScreen(
                                 .pointerInput(tab) {
                                     detectVerticalDragGestures(
                                         onDragStart = {
-                                            draggedTab = liveTabs.indexOf(tab)
+                                            draggedTabName = tab
+                                            draggedStartTabIdx = liveTabs.indexOf(tab)
                                             tabDragAccum = 0f
                                         },
                                         onDragEnd = {
-                                            draggedTab = -1; tabDragAccum = 0f
+                                            draggedTabName = null; tabDragAccum = 0f
                                             prefs.setTabOrder(liveTabs.toList())
                                         },
                                         onDragCancel = {
-                                            draggedTab = -1; tabDragAccum = 0f
+                                            draggedTabName = null; tabDragAccum = 0f
                                             prefs.setTabOrder(liveTabs.toList())
                                         }
                                     ) { change, dy ->
                                         change.consume()
                                         tabDragAccum += dy
-                                        val i = liveTabs.indexOf(tab)
-                                        if (i >= 0 && kotlin.math.abs(tabDragAccum) > tabRowHeightPx * 0.5f) {
-                                            val dir = if (tabDragAccum > 0) 1 else -1
-                                            val target = (i + dir).coerceIn(0, liveTabs.lastIndex)
-                                            if (target != i) {
-                                                val moved = liveTabs.removeAt(i)
-                                                liveTabs.add(target, moved)
-                                                draggedTab = target
-                                                tabDragAccum -= dir * tabRowHeightPx
-                                            }
-                                        }
                                     }
                                 }
                         )
