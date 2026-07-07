@@ -80,7 +80,7 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
-                .padding(horizontal = 24.dp)
+                .padding(start = 24.dp, end = 24.dp, top = 0.dp, bottom = 80.dp)
                 .verticalScroll(rememberScrollState())
                 .pointerInput(Unit) {
                     var swipe = 0f

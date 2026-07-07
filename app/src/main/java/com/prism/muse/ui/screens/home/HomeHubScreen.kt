@@ -184,14 +184,7 @@ fun HomeHubScreen(
                 }
             }
 
-            val hasPlayer = playback.current != null
-            PagerDots(
-                count = panels.size,
-                current = pagerState.currentPage,
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .padding(bottom = if (hasPlayer) 8.dp else 24.dp)
-            )
+            Spacer(Modifier.padding(bottom = if (playback.current != null) 8.dp else 24.dp))
         }
     }
 }
