@@ -83,12 +83,28 @@ fun QueueScreen(viewModel: PlaybackViewModel, onBack: () -> Unit) {
         val q = state.queue.toList()
         mutableStateListOf<Song>().also { it.addAll(q) }
     }
+    // Stable key per queue slot (independent of position) so the LazyColumn
+    // composable follows the row through reorderings instead of being disposed
+    // — disposing mid-drag cancels the gesture coroutine, which is why a row
+    // "got stuck" after one swap.
+    val queueKeys = remember(state.queue) {
+        var n = 0
+        mutableStateListOf<Int>().also { list -> repeat(state.queue.size) { list.add(n++) } }
+    }
     val safeCurrentIndex = state.currentIndex.coerceIn(0, (queueList.size - 1).coerceAtLeast(0))
     val listState = rememberLazyListState()
     var draggedId by remember { mutableStateOf<String?>(null) }
-    var draggedStartIdx by remember { mutableIntStateOf(-1) }
+    var draggedSlotKey by remember { mutableIntStateOf(-1) }
     var dragAccumY by remember { mutableFloatStateOf(0f) }
     val rowHeightPx = with(density) { 72.dp.toPx() }
+
+    // The list now shows the whole queue (no `drop(currentIndex)` shortcut), so
+    // jump straight to the playing row on first show.
+    androidx.compose.runtime.LaunchedEffect(safeCurrentIndex, queueList.size) {
+        if (!listState.isScrollInProgress && queueList.isNotEmpty()) {
+            runCatching { listState.scrollToItem(safeCurrentIndex) }
+        }
+    }
 
     PlayerBackdrop(artUrl = state.current?.artUrl) {
         Column(
@@ -128,26 +144,35 @@ fun QueueScreen(viewModel: PlaybackViewModel, onBack: () -> Unit) {
                 modifier = Modifier.weight(1f).pointerInput(Unit) {
                     var down = 0f
                     detectVerticalDragGestures(
-                        onDragEnd = { if (down > 80f) onBack(); down = 0f },
+                        onDragEnd = { if (down > 80f && draggedId == null) onBack(); down = 0f },
                         onDragCancel = { down = 0f }
-                    ) { _, dy -> down += dy }
+                    ) { _, dy -> if (draggedId == null) down += dy }
                 },
                 contentPadding = PaddingValues(start = 22.dp, end = 22.dp, bottom = 12.dp)
             ) {
-                // Key includes the position: the same song can legitimately sit in
-                // the queue twice ("add to queue" twice), and duplicate LazyColumn
-                // keys crash with IllegalArgumentException.
-                itemsIndexed(queueList.drop(safeCurrentIndex), key = { i, s -> "${i + safeCurrentIndex}:${s.id}" }) { idxShown, song ->
-                    val realIdx = idxShown + safeCurrentIndex
-                    val isCurrent = song.id == currentId
-                    val isDragging = draggedId == song.id
+                // Show every queue slot — already-played rows are greyed out via [played]
+// instead of being dropped. Dropping by currentIndex (the old behavior) hid
+// arbitrary subsets under shuffle because ExoPlayer's media-item index jumps
+// along its opaque shuffle order, not sequentially.
+itemsIndexed(queueList, key = { i, _ -> queueKeys[i] }) { realIdx, song ->
+                    val isCurrent = realIdx == safeCurrentIndex
+                    val isDragging = queueKeys[realIdx] == draggedSlotKey && !isCurrent
+                    // Positional "previous" — songs earlier in queue than the
+                    // one now playing read as already-heard. No history tracking;
+                    // this stays intuitive under shuffle (the queue UI keeps its
+                    // slot order, pre-current = before now-playing).
+                    val played = realIdx < safeCurrentIndex
 
                     if (isCurrent) {
-                        QueueRow(song, isCurrent = true, accent = accent, onClick = { viewModel.playAt(realIdx) })
+                        QueueRow(
+                            song = song, isCurrent = true, accent = accent,
+                            played = false, onClick = { viewModel.playAt(realIdx) }
+                        )
                     } else {
                         val dismiss = rememberSwipeToDismissBoxState(confirmValueChange = { v ->
                             if (v == SwipeToDismissBoxValue.EndToStart) {
-                                viewModel.removeFromQueue(song); queueList.remove(song); true
+                                if (realIdx >= 0 && realIdx < queueKeys.size) queueKeys.removeAt(realIdx)
+                                viewModel.removeFromQueue(song); queueList.removeAt(realIdx); true
                             } else false
                         })
                         SwipeToDismissBox(state = dismiss, enableDismissFromStartToEnd = false,
@@ -164,24 +189,29 @@ fun QueueScreen(viewModel: PlaybackViewModel, onBack: () -> Unit) {
                             Box {
                                 QueueRow(
                                     song = song, isCurrent = false, accent = accent,
-                                    onClick = { viewModel.playAt(realIdx) },
+                                    played = played, onClick = { viewModel.playAt(realIdx) },
                                     isDragging = isDragging,
                                     dragOffset = if (isDragging) dragAccumY else 0f,
                                     onDragStart = {
                                         draggedId = song.id
-                                        draggedStartIdx = queueList.indexOfFirst { it.id == song.id }
+                                        draggedSlotKey = queueKeys[realIdx]
                                         dragAccumY = 0f
                                     },
                                     onDrag = { dy ->
                                         dragAccumY += dy
-                                        // Swap inside gesture handler, not in composable body
-                                        val i = queueList.indexOfFirst { it.id == song.id }
-                                        if (i >= 0 && i != safeCurrentIndex) {
+                                        // The pointer-input gesture scope captures this lambda
+                                        // once, so realIdx / queueKeys[realIdx] would be stale
+                                        // after a swap. Re-resolve the dragged slot's position
+                                        // by its stable key every event — survives reorderings
+                                        // and is unique even with duplicate songs.
+                                        val i = queueKeys.indexOf(draggedSlotKey)
+                                        if (i in queueList.indices && i != safeCurrentIndex) {
                                             if (kotlin.math.abs(dragAccumY) > rowHeightPx * 0.5f) {
                                                 val dir = if (dragAccumY > 0) 1 else -1
                                                 val target = (i + dir).coerceIn(0, queueList.lastIndex)
                                                 if (target != i && target != safeCurrentIndex) {
                                                     queueList[i] = queueList[target].also { queueList[target] = queueList[i] }
+                                                    queueKeys[i] = queueKeys[target].also { queueKeys[target] = queueKeys[i] }
                                                     dragAccumY -= dir * rowHeightPx
                                                 }
                                             }
@@ -222,12 +252,17 @@ private fun nowStamp(): String {
 @Composable
 private fun QueueRow(
     song: Song, isCurrent: Boolean, accent: Color, onClick: () -> Unit,
+    played: Boolean = false,
     isDragging: Boolean = false,
     dragOffset: Float = 0f,
     onDragStart: (() -> Unit)? = null,
     onDrag: ((Float) -> Unit)? = null,
     onDragEnd: (() -> Unit)? = null
 ) {
+    // Played-but-not-current rows fade back so the upcoming list still reads as
+    // "what's next", with history dimmed behind it rather than hidden.
+    val titleColor = if (isCurrent) TextPrimary else if (played) TextTertiary else TextPrimary
+    val artistColor = if (isCurrent) TextSecondary else if (played) TextTertiary.copy(alpha = 0.6f) else TextSecondary
     Column {
         Row(
             Modifier.fillMaxWidth()
@@ -235,6 +270,7 @@ private fun QueueRow(
                     translationY = dragOffset
                     scaleX = if (isDragging) 1.04f else 1f
                     scaleY = if (isDragging) 1.04f else 1f
+                    alpha = if (played && !isCurrent) 0.55f else 1f
                 }
                 .combinedClickable(onClick = onClick, onLongClick = { SongActions.open(song, queueContext = true) })
                 .padding(vertical = 12.dp),
@@ -246,9 +282,9 @@ private fun QueueRow(
             Artwork(seed = song.artUrl, modifier = Modifier.padding(start = 4.dp).size(48.dp))
             Column(Modifier.weight(1f).padding(start = 14.dp)) {
                 Text(song.title, style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp),
-                    color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    color = titleColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(song.artist, style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    color = artistColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Text("⋮⋮", color = TextTertiary, fontSize = 16.sp,
                 modifier = Modifier.pointerInput(Unit) {

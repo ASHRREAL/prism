@@ -17,6 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,6 +32,7 @@ import com.prism.muse.data.model.Album
 import com.prism.muse.data.model.Artist
 import com.prism.muse.ui.components.AriaBackground
 import com.prism.muse.ui.components.Artwork
+import com.prism.muse.ui.components.gyroTilt
 import com.prism.muse.ui.theme.HubTitle
 import com.prism.muse.ui.theme.SectionHeader
 import com.prism.muse.ui.theme.TextPrimary
@@ -45,6 +47,7 @@ fun ArtistDetailScreen(
     onAlbumClick: (Album) -> Unit
 ) {
     val graph = PrismApp.graph(LocalContext.current)
+    val depthEffect = graph.prefs.depthEffect.collectAsState().value
 
     var albums by remember { mutableStateOf<List<Album>>(emptyList()) }
     var bio by remember { mutableStateOf(artist.bio) }
@@ -54,7 +57,9 @@ fun ArtistDetailScreen(
     }
 
     AriaBackground {
-        Column(Modifier.fillMaxSize().statusBarsPadding()) {
+        Column(Modifier.fillMaxSize().statusBarsPadding()
+            .then(if (depthEffect) Modifier.gyroTilt(maxDegrees = 4f) else Modifier)
+        ) {
             Text(
                 "‹",
                 style = SectionHeader.copy(fontSize = 30.sp),

@@ -185,6 +185,103 @@ fun VisualizerScreen(
                 val centerY = h / 2
                 val barWidth = w / barCount
 
+                // Animated Lissajous (a=1, b=2 → figure-8 / "infinity"). Layered as
+                // four time-offset echo trails each deformed by a different bin
+                // slice of the FFT, so the whole figure breathes asymmetrically
+                // instead of just one comet moving. The ratio between the two
+                // frequencies warbles slowly between 2 (figure-8) and ~2.7 so the
+                // loop subtly morphs between an infinity and a trefoil knot.
+                fun drawInfinity(
+                    amp: FloatArray,
+                    mainAlpha: Float,
+                    glowAlpha: Float,
+                    phase: Float,
+                    radialBoost: Float
+                ) {
+                    val cx = w / 2
+                    val cy = centerY
+                    val baseR = min(w, h) * 0.32f
+                    val ampLen = amp.size
+                    if (ampLen == 0) return
+                    val bRatio = 2f + 0.7f * (0.5f + 0.5f * sin(phase * 0.27f))
+                    val points = 220
+                    val twoPi = 2f * Math.PI.toFloat()
+
+                    fun trailPath(trailIdx: Int, trailPhase: Float): androidx.compose.ui.graphics.Path {
+                        val p = androidx.compose.ui.graphics.Path()
+                        // Each trail reads a shifted bin slice so it deforms in a
+                        // slightly different shape than its neighbours — gives the
+                        // figure a real "trailing echoes" feel rather than 4
+                        // identical stacked copies.
+                        val binOffset = trailIdx * (ampLen / 4)
+                        val scaleWobble = 1f + 0.04f * sin(phase * 1.8f + trailIdx)
+                        for (i in 0..points) {
+                            val u = (i.toFloat() / points) * twoPi
+                            val bin = ((i * ampLen / points + binOffset) % ampLen).coerceIn(0, ampLen - 1)
+                            val bulge = 1f + amp[bin] * radialBoost * scaleWobble
+                            val x = cx + baseR * bulge * sin(u + trailPhase)
+                            val y = cy + baseR * 0.62f * bulge * sin(bRatio * u + trailPhase * 0.5f)
+                            if (i == 0) p.moveTo(x, y) else p.lineTo(x, y)
+                        }
+                        p.close()
+                        return p
+                    }
+
+                    // Echo trails back-to-front: outermost first (becomes the
+                    // background glow), innermost last (sharpest top layer).
+                    val trails = 4
+                    for (trail in trails - 1 downTo 0) {
+                        val trailPhase = phase - trail * 0.14f
+                        val path = trailPath(trail, trailPhase)
+                        val tAlpha = mainAlpha * (if (trail == 0) 1f else 0.32f - trail * 0.05f)
+                        if (trail == 0 && glowAlpha > 0f) {
+                            // Outer-most: layered glow rings for that video-scope bloom.
+                            drawPath(path, accent.copy(alpha = glowAlpha * 0.10f),
+                                style = androidx.compose.ui.graphics.drawscope.Stroke(22f, cap = StrokeCap.Round))
+                            drawPath(path, accent.copy(alpha = glowAlpha * 0.32f),
+                                style = androidx.compose.ui.graphics.drawscope.Stroke(11f, cap = StrokeCap.Round))
+                            drawPath(path, accent.copy(alpha = tAlpha),
+                                style = androidx.compose.ui.graphics.drawscope.Stroke(2.4f, cap = StrokeCap.Round))
+                        } else {
+                            drawPath(path, accent.copy(alpha = tAlpha),
+                                style = androidx.compose.ui.graphics.drawscope.Stroke(1.4f, cap = StrokeCap.Round))
+                        }
+                    }
+
+                    // Comet dots — six chase points evenly distributed around the
+                    // loop, each pulsing with its own bin so all parts visibly move.
+                    val comets = 6
+                    for (k in 0 until comets) {
+                        val du = phase * 1.6f + k * (twoPi / comets)
+                        val binIdx = ((k * ampLen / comets) % ampLen).coerceIn(0, ampLen - 1)
+                        val a = 1f + amp[binIdx] * radialBoost
+                        val dx = cx + baseR * a * sin(du)
+                        val dy = cy + baseR * 0.62f * a * sin(bRatio * du + phase * 0.5f)
+                        // Pulse each comet's size with its own bin — the "infinite"
+                        // trail reads as many beads streaming around the curve.
+                        val pulse = 3f + 2.5f * (0.5f + 0.5f * sin(phase * 2.4f + k))
+                        val dim = if (k % 2 == 0) 1f else 0.55f
+                        drawCircle(accent.copy(alpha = mainAlpha * dim), pulse, Offset(dx, dy))
+                        // Spark on the loud comets.
+                        if (amp[binIdx] > 0.35f) {
+                            drawCircle(accent.copy(alpha = mainAlpha * 0.25f), pulse * 2.4f, Offset(dx, dy))
+                        }
+                    }
+
+                    // Slow counter-rotating trefoil overlay (a=1, b=3) so the
+                    // figure has a second, slower-moving "ghost" shape behind it.
+                    val ghost = androidx.compose.ui.graphics.Path()
+                    for (i in 0..points) {
+                        val u = (i.toFloat() / points) * twoPi
+                        val x = cx + baseR * 0.78f * sin(u - phase * 0.4f)
+                        val y = cy + baseR * 0.50f * sin(3f * u + phase * 0.2f)
+                        if (i == 0) ghost.moveTo(x, y) else ghost.lineTo(x, y)
+                    }
+                    ghost.close()
+                    drawPath(ghost, accent.copy(alpha = mainAlpha * 0.18f),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(1.2f, cap = StrokeCap.Round))
+                }
+
                 if (hasFft && state.isPlaying) {
                     // Real FFT data, eased at 60fps
                     when (style) {
@@ -223,22 +320,10 @@ fun VisualizerScreen(
                             }
                         }
                         "pattern" -> {
-                            val cols = 8
-                            val rows = 6
-                            val cellW = w / cols
-                            val cellH = h / rows
-                            val maxR = min(cellW, cellH) * 0.35f
-                            for (c in 0 until cols) {
-                                for (r in 0 until rows) {
-                                    val idx = ((c * rows + r) * barCount / (cols * rows)).coerceIn(0, barCount - 1)
-                                    val lvl = levels[idx]
-                                    val cx = c * cellW + cellW / 2
-                                    val cy = r * cellH + cellH / 2
-                                    val r = (4f + lvl * maxR).coerceAtLeast(2f)
-                                    val alpha = (0.2f + lvl * 0.6f).coerceIn(0f, 1f)
-                                    drawCircle(accent.copy(alpha = alpha), r, Offset(cx, cy))
-                                }
-                            }
+                            // Audio-reactive infinity curve — bins push the
+                            // figure-8 outward in time with the spectrum.
+                            val t = tick / 90f
+                            drawInfinity(levels, mainAlpha = 1f, glowAlpha = 1f, phase = t, radialBoost = 0.55f)
                         }
                         else -> {
                             val minBar = 3f
@@ -256,27 +341,48 @@ fun VisualizerScreen(
                     // Fallback: wave-based animation if no FFT (mic permission
                     // denied or no session) — driven by the frame clock so it
                     // stays fluid instead of stepping with the position poller.
-                    val t = tick / 60f
-                    for (i in 0 until barCount) {
-                        val nh = (0.35f + 0.65f * abs(sin(i * 0.22f + t * 0.9f) * cos(i * 0.16f + t * 1.3f))) * h * 0.55f
-                        val x = i * barWidth + barWidth / 2
-                        drawLine(accent.copy(alpha = 0.5f), Offset(x, centerY), Offset(x, centerY - nh),
-                            barWidth * 0.5f, StrokeCap.Round)
-                        drawLine(accent.copy(alpha = 0.2f), Offset(x, centerY), Offset(x, centerY + nh * 0.6f),
-                            barWidth * 0.5f, StrokeCap.Round)
+                    if (style == "pattern") {
+                        // Synthetic envelope so the figure-8 still breathes when
+                        // there's no microphone capture to drive it.
+                        val synth = FloatArray(barCount)
+                        val t = tick / 30f
+                        for (i in 0 until barCount) {
+                            synth[i] = (0.25f + 0.35f * abs(sin(i * 0.30f + t * 0.9f) *
+                                cos(i * 0.18f + t * 0.6f))).coerceIn(0f, 1f)
+                        }
+                        drawInfinity(synth, mainAlpha = 0.85f, glowAlpha = 0.6f, phase = tick / 90f, radialBoost = 0.4f)
+                    } else {
+                        val t = tick / 60f
+                        for (i in 0 until barCount) {
+                            val nh = (0.35f + 0.65f * abs(sin(i * 0.22f + t * 0.9f) * cos(i * 0.16f + t * 1.3f))) * h * 0.55f
+                            val x = i * barWidth + barWidth / 2
+                            drawLine(accent.copy(alpha = 0.5f), Offset(x, centerY), Offset(x, centerY - nh),
+                                barWidth * 0.5f, StrokeCap.Round)
+                            drawLine(accent.copy(alpha = 0.2f), Offset(x, centerY), Offset(x, centerY + nh * 0.6f),
+                                barWidth * 0.5f, StrokeCap.Round)
+                        }
+                        drawCircle(accent.copy(alpha = 0.4f), 6f, Offset(w / 2, centerY))
                     }
-                    drawCircle(accent.copy(alpha = 0.4f), 6f, Offset(w / 2, centerY))
                 } else {
                     // Idle: subtle ripple
-                    for (i in 0 until barCount) {
-                        val nh = (0.1f + 0.15f * abs(sin(i * 0.3f))) * h * 0.3f
-                        val x = i * barWidth + barWidth / 2
-                        drawLine(accent.copy(alpha = 0.2f), Offset(x, centerY), Offset(x, centerY - nh),
-                            barWidth * 0.4f, StrokeCap.Round)
-                        drawLine(accent.copy(alpha = 0.1f), Offset(x, centerY), Offset(x, centerY + nh),
-                            barWidth * 0.4f, StrokeCap.Round)
+                    if (style == "pattern") {
+                        val synth = FloatArray(barCount)
+                        val t = tick / 60f
+                        for (i in 0 until barCount) {
+                            synth[i] = (0.10f + 0.18f * abs(sin(i * 0.30f + t * 0.7f))).coerceIn(0f, 1f)
+                        }
+                        drawInfinity(synth, mainAlpha = 0.4f, glowAlpha = 0.25f, phase = tick / 110f, radialBoost = 0.25f)
+                    } else {
+                        for (i in 0 until barCount) {
+                            val nh = (0.1f + 0.15f * abs(sin(i * 0.3f))) * h * 0.3f
+                            val x = i * barWidth + barWidth / 2
+                            drawLine(accent.copy(alpha = 0.2f), Offset(x, centerY), Offset(x, centerY - nh),
+                                barWidth * 0.4f, StrokeCap.Round)
+                            drawLine(accent.copy(alpha = 0.1f), Offset(x, centerY), Offset(x, centerY + nh),
+                                barWidth * 0.4f, StrokeCap.Round)
+                        }
+                        drawCircle(accent.copy(alpha = 0.15f), 4f, Offset(w / 2, centerY))
                     }
-                    drawCircle(accent.copy(alpha = 0.15f), 4f, Offset(w / 2, centerY))
                 }
             }
 

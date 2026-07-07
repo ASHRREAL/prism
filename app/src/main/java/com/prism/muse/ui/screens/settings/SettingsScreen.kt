@@ -301,6 +301,7 @@ fun SettingsScreen(
             val tabRowHeightPx = with(LocalDensity.current) { 56.dp.toPx() }
 
             liveTabs.forEachIndexed { idx, tab ->
+                androidx.compose.runtime.key(tab) {
                 val shown = tab in visibleTabs
                 val dragging = draggedTabName == tab
 
@@ -375,6 +376,7 @@ fun SettingsScreen(
                     }
                     HairlineDivider()
                 }
+                } // key(tab)
             }
 
             GroupLabel("ABOUT")

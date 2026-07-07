@@ -100,7 +100,6 @@ class PlayerHolder(
     private var originalQueue: List<Song> = emptyList()
     /** Whether the original queue was created from a shuffle-press action. */
     private var wasShuffled: Boolean = false
-    private var playlistCompletedCount = 0
 
     /**
      * Tries to restore the last playback session. Call once after construction.
@@ -191,26 +190,31 @@ class PlayerHolder(
                 val s = _state.value
                 val index = player.currentMediaItemIndex
 
-                // If shuffled + repeating (ALL mode), reshuffle when wrapping back to start
-                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO &&
-                    s.repeat == RepeatMode.ALL && s.shuffle && index == 0) {
-                    reshuffleOnReplay()
-                    return
-                }
-
-                // ONCE mode: stop after playlist finishes once
-                if (s.repeat == RepeatMode.ONCE && reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
-                    if (index == 0) playlistCompletedCount++
-                    if (playlistCompletedCount >= 1) {
-                        togglePlay()
-                        _state.update { it.copy(isPlaying = false) }
-                        return
-                    }
-                }
-
                 _state.update { it.copy(currentIndex = index, positionSec = 0f) }
                 _state.value.current?.let(library::scrobble)
                 saveSession()
+            }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (demoMode) return
+                // STATE_ENDED fires when REPEAT_MODE_OFF lets the last queued item end
+                // naturally. We engineer exactly this for two cases:
+                //  - repeat OFF / ONCE: stop playback (don't loop)
+                //  - repeat-ALL + shuffle: we run ExoPlayer in REPEAT_MODE_OFF for the
+                //    shuffle lap (see [cycleRepeat]) so we get a deterministic end-of-
+                //    playlist signal here. Build a fresh shuffled queue starting at a
+                //    random head song, restart playback from slot 0. No more counting
+                //    AUTO transitions or fighting ExoPlayer's opaque shuffle order —
+                //    the new lap starts visibly at queue[0].
+                if (playbackState == Player.STATE_ENDED) {
+                    val s = _state.value
+                    if (s.repeat == RepeatMode.ALL && s.shuffle && s.queue.size > 1) {
+                        reshuffleOnReplay()
+                        return
+                    }
+                    _state.update { it.copy(isPlaying = false) }
+                    saveSession()
+                }
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -294,13 +298,42 @@ class PlayerHolder(
         runCatching { player.volume = vol.coerceIn(0f, 1f) }
     }
 
-    /** Reshuffles the queue when repeat-all re-loops with shuffle on. */
+    /**
+     * Re-shuffles the queue when repeat-all re-loops with shuffle on. Picks a
+     * random song, places it at the head of a fresh queue, then shuffles every
+     * other song into the trailing slots — and starts playback from that head.
+     * ExoPlayer's own shuffle order is opaque (we can't ask it to start from a
+     * specific song on the next lap) so rebuilding media items here is the only
+     * way to control which song plays first next loop. This is safe because the
+     * previous item just ended naturally — there's no in-progress playback to
+     * interrupt, only the next lap to set up.
+     */
     private fun reshuffleOnReplay() {
-        // Toggle shuffle off/on forces ExoPlayer to create a fresh shuffled order
-        // without rebuilding media items (which would briefly stop playback).
-        player.shuffleModeEnabled = false
-        player.shuffleModeEnabled = true
-        _state.update { it.copy(shuffle = true) }
+        val s = _state.value
+        if (s.queue.size <= 1) {
+            _state.update { it.copy(shuffle = true) }
+            return
+        }
+        val first = s.queue.random()
+        // Drop exactly one instance of `first` (the queue can hold duplicate songs
+        // — `add to queue` twice is legal — so removing by id would nuke both).
+        val rest = s.queue.toMutableList().apply { removeAt(s.queue.indexOf(first)) }.shuffled()
+        val newQueue = listOf(first) + rest
+        _state.update {
+            it.copy(queue = newQueue, currentIndex = 0, positionSec = 0f, shuffle = true)
+        }
+        if (!demoMode) {
+            player.setMediaItems(newQueue.map(::toMediaItem), 0, 0L)
+            // STATE_ENDED must be followed by prepare() + play() to start the next
+            // lap — setMediaItems alone leaves the player idle at slot 0.
+            player.shuffleModeEnabled = false
+            player.prepare()
+            player.playWhenReady = true
+            startService()
+        } else {
+            _state.update { it.copy(isPlaying = true) }
+        }
+        saveSession()
     }
 
     fun setQueue(songs: List<Song>, startIndex: Int = 0, play: Boolean = true) {
@@ -331,8 +364,11 @@ class PlayerHolder(
 
     /** Jump to a queue position (safe with duplicate songs in the queue). */
     fun playAt(index: Int) {
-        if (index !in _state.value.queue.indices) return
-        _state.update { it.copy(currentIndex = index, positionSec = 0f, isPlaying = true) }
+        val s = _state.value
+        if (index !in s.queue.indices) return
+        _state.update {
+            it.copy(currentIndex = index, positionSec = 0f, isPlaying = true)
+        }
         if (!demoMode) {
             player.seekTo(index, 0L)
             player.playWhenReady = true
@@ -363,9 +399,11 @@ class PlayerHolder(
 
     fun skipPrevious() {
         if (demoMode) {
-            if (_state.value.queue.isEmpty()) return
+            val s = _state.value
+            if (s.queue.isEmpty()) return
             _state.update {
-                it.copy(currentIndex = (it.currentIndex - 1 + it.queue.size) % it.queue.size, positionSec = 0f)
+                it.copy(currentIndex = (s.currentIndex - 1 + s.queue.size) % s.queue.size,
+                    positionSec = 0f)
             }
         } else player.seekToPreviousMediaItem()
     }
@@ -375,6 +413,7 @@ class PlayerHolder(
         _state.update { it.copy(shuffle = shuffle) }
         player.shuffleModeEnabled = shuffle
         wasShuffled = shuffle
+        applyRepeatMode()
     }
 
     fun cycleRepeat() {
@@ -384,13 +423,25 @@ class PlayerHolder(
             RepeatMode.ONCE -> RepeatMode.OFF
         }
         _state.update { it.copy(repeat = next) }
-        player.repeatMode = when (next) {
-            RepeatMode.OFF -> Player.REPEAT_MODE_OFF
-            RepeatMode.ALL -> Player.REPEAT_MODE_ALL
-            RepeatMode.ONCE -> Player.REPEAT_MODE_OFF
+        applyRepeatMode()
+    }
+
+    /**
+     * Maps the app's repeat mode to ExoPlayer's repeat mode. Repeat-ALL-with-shuffle
+     * runs as REPEAT_MODE_OFF deliberately — we drive the lap restart ourselves from
+     * the STATE_ENDED callback (see [onPlaybackStateChanged]) so we can pick a
+     * random head song, place it at queue slot 0, and restart visibly from there.
+     * Without this ExoPlayer's opaque internal shuffle order wraps on its own and
+     * the new lap would start wherever it landed (the "starts from the 10th one"
+     * bug). Everything else maps directly to ExoPlayer's repeat semantics.
+     */
+    private fun applyRepeatMode() {
+        val s = _state.value
+        player.repeatMode = when {
+            s.repeat == RepeatMode.ALL && s.shuffle -> Player.REPEAT_MODE_OFF
+            s.repeat == RepeatMode.ALL -> Player.REPEAT_MODE_ALL
+            else -> Player.REPEAT_MODE_OFF
         }
-        // Track playlist completion for ONCE mode
-        if (next == RepeatMode.ONCE) playlistCompletedCount = 0
     }
 
     fun setSpeed(speed: Float) {
@@ -402,7 +453,8 @@ class PlayerHolder(
     fun addNext(song: Song) {
         val s = _state.value
         if (s.queue.isEmpty()) { setQueue(listOf(song)); return }
-        val list = s.queue.toMutableList().apply { add(s.currentIndex + 1, song) }
+        val ins = s.currentIndex + 1
+        val list = s.queue.toMutableList().apply { add(ins, song) }
         _state.update { it.copy(queue = list) }
         originalQueue = list.toList()
         if (!demoMode) player.addMediaItem(player.currentMediaItemIndex + 1, toMediaItem(song))
@@ -424,13 +476,19 @@ class PlayerHolder(
         val curIdx = s.currentIndex
         val current = s.current ?: return
         val rest = s.queue.filterIndexed { i, _ -> i != curIdx }.shuffled()
-        val newList = rest.toMutableList().apply { add(curIdx.coerceIn(0, size), current) }
-        val newCurIdx = newList.indexOfFirst { it.id == current.id }
-        _state.update { it.copy(queue = newList, currentIndex = newCurIdx) }
+        val insertPos = curIdx.coerceIn(0, rest.size)
+        val newList = rest.toMutableList().apply { add(insertPos, current) }
+        // currentIndex points to the just-reinserted `current`, never the
+        // first matching id in case the same song sits twice in the queue.
+        val newCurIdx = insertPos
+        _state.update {
+            it.copy(queue = newList, currentIndex = newCurIdx, shuffle = true)
+        }
         if (!demoMode) {
             player.setMediaItems(newList.map(::toMediaItem), newCurIdx, (s.positionSec * 1000).toLong())
             // Don't call prepare() — it interrupts playback
             player.playWhenReady = s.isPlaying
+            player.shuffleModeEnabled = false
         }
     }
 
@@ -464,9 +522,36 @@ class PlayerHolder(
     }
 
     private fun demoAdvance() {
-        if (_state.value.queue.isEmpty()) return
-        _state.update {
-            it.copy(currentIndex = (it.currentIndex + 1) % it.queue.size, positionSec = 0f)
+        val s = _state.value
+        if (s.queue.isEmpty()) return
+        if (s.currentIndex < s.queue.lastIndex) {
+            _state.update {
+                it.copy(currentIndex = s.currentIndex + 1, positionSec = 0f)
+            }
+            _state.value.current?.let(library::scrobble)
+            return
+        }
+        // Just played the last item: handle repeat modes.
+        when (s.repeat) {
+            RepeatMode.ALL -> {
+                if (s.shuffle && s.queue.size > 1) {
+                    // Pick a random head song, shuffle the rest behind it — same
+                    // rule as the real-mode reshuffle so the next lap starts at
+                    // a random song sitting visibly at queue slot 0.
+                    val first = s.queue.random()
+                    val rest = s.queue.toMutableList().apply { removeAt(s.queue.indexOf(first)) }.shuffled()
+                    val newQueue = listOf(first) + rest
+                    _state.update {
+                        it.copy(queue = newQueue, currentIndex = 0, positionSec = 0f)
+                    }
+                } else {
+                    _state.update { it.copy(currentIndex = 0, positionSec = 0f) }
+                }
+            }
+            RepeatMode.ONCE, RepeatMode.OFF -> {
+                _state.update { it.copy(isPlaying = false, positionSec = 0f) }
+                return
+            }
         }
         _state.value.current?.let(library::scrobble)
     }

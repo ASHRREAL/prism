@@ -168,7 +168,7 @@ fun HomeHubScreen(
                     Modifier
                         .fillMaxSize()
                         .padding(start = 24.dp, end = 24.dp)
-                        .then(if (depthEffect) Modifier.gyroTilt(maxDegrees = 3f) else Modifier)
+                        .then(if (depthEffect) Modifier.gyroTilt(maxDegrees = 6f) else Modifier)
                         .graphicsLayer {
                             val off = (page - pagerState.currentPage) - pagerState.currentPageOffsetFraction
                             val t = off.coerceIn(0f, 1f)

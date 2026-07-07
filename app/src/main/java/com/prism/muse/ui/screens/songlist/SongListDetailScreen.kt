@@ -18,6 +18,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
@@ -28,6 +30,7 @@ import com.prism.muse.playback.PlaybackViewModel
 import com.prism.muse.ui.components.AriaBackground
 import com.prism.muse.ui.components.HairlineDivider
 import com.prism.muse.ui.components.SongRowWithMenu
+import com.prism.muse.ui.components.gyroTilt
 import com.prism.muse.ui.components.TextLinkRow
 import com.prism.muse.ui.theme.HubTitle
 import com.prism.muse.ui.theme.LocalPrismAccent
@@ -45,6 +48,8 @@ fun SongListDetailScreen(
     onBack: () -> Unit
 ) {
     val accent = LocalPrismAccent.current
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val depthEffect = com.prism.muse.PrismApp.graph(ctx).prefs.depthEffect.collectAsState().value
 
     AriaBackground(tinted = true) {
         Column(
@@ -92,6 +97,7 @@ fun SongListDetailScreen(
                 LazyColumn(
                     contentPadding = PaddingValues(start = 0.dp, top = 4.dp, end = 0.dp, bottom = 80.dp),
                     modifier = Modifier.weight(1f)
+                        .then(if (depthEffect) Modifier.gyroTilt(maxDegrees = 4f) else Modifier)
                 ) {
                     // Playlists may contain the same song more than once; a plain
                     // id key would crash on the duplicate. Play by index so the
