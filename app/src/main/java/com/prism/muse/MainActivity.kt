@@ -314,7 +314,7 @@ private fun PrismApp(playbackViewModel: PlaybackViewModel) {
                     onTogglePlay = playbackViewModel::togglePlay,
                     onSkipNext = playbackViewModel::skipNext,
                     onExpand = { nowPlayingOpen = true },
-                    modifier = Modifier.fillMaxWidth().navigationBarsPadding()
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         }

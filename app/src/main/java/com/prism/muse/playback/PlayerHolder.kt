@@ -79,7 +79,7 @@ class PlayerHolder(
     /** Whether the original queue was created from a shuffle-press action. */
     private var wasShuffled: Boolean = false
 
-    val audioSessionId: Int get() = player.audioSessionId
+    val audioSessionId: Int get() = runCatching { player.audioSessionId }.getOrDefault(0)
 
     /**
      * Tries to restore the last playback session. Call once after construction.
@@ -188,7 +188,7 @@ class PlayerHolder(
             it.copy(queue = songs, currentIndex = startIndex, positionSec = 0f, isPlaying = play)
         }
         if (demoMode) {
-            player.stop()
+            runCatching { player.stop() }
             saveSession()
             return
         }

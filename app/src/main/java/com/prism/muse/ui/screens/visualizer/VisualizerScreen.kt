@@ -15,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,6 +41,7 @@ import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
+import kotlinx.coroutines.delay
 
 @Composable
 fun VisualizerScreen(
@@ -49,15 +51,25 @@ fun VisualizerScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val accent = LocalPrismAccent.current
-    val sessionId = viewModel.audioSessionId
 
+    var sessionIdState by remember { mutableStateOf(viewModel.audioSessionId) }
     var waveformBytes by remember { mutableStateOf(ByteArray(0)) }
     var fftBytes by remember { mutableStateOf(ByteArray(0)) }
 
-    DisposableEffect(sessionId) {
-        val viz = if (sessionId != 0) {
+    LaunchedEffect(Unit) {
+        while (true) {
+            val id = runCatching { viewModel.audioSessionId }.getOrDefault(0)
+            if (id != 0 && id != sessionIdState) {
+                sessionIdState = id
+            }
+            kotlinx.coroutines.delay(500)
+        }
+    }
+
+    DisposableEffect(sessionIdState) {
+        val viz = if (sessionIdState != 0) {
             runCatching {
-                Visualizer(sessionId).apply {
+                Visualizer(sessionIdState).apply {
                     captureSize = Visualizer.getCaptureSizeRange()[1] / 2
                     setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
                         override fun onWaveFormDataCapture(viz: Visualizer?, bytes: ByteArray?, rate: Int) {
