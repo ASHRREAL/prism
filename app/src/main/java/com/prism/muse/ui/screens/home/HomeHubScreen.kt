@@ -137,7 +137,9 @@ fun HomeHubScreen(
                     color = TextPrimary,
                     maxLines = 1,
                     softWrap = false,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .graphicsLayer { translationX = -scroll * 22.dp.toPx() }
                 )
                 FloatingIcon(Icons.Rounded.Search, "Search", onClick = onSearchClick, size = 44.dp)
                 FloatingIcon(Icons.Rounded.Settings, "Settings", onClick = onSettingsClick, size = 44.dp)
