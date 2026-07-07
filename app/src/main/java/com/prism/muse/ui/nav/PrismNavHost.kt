@@ -5,13 +5,17 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -88,11 +92,24 @@ fun PrismNavHost(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    androidx.compose.material3.Text(
-                        "album not found",
-                        color = com.prism.muse.ui.theme.TextTertiary
-                    )
-                    LaunchedEffect(Unit) { navController.popBackStack() }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        androidx.compose.material3.Text(
+                            "album not found",
+                            color = com.prism.muse.ui.theme.TextTertiary
+                        )
+                        androidx.compose.material3.Text(
+                            "connect a server to load your library",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                            color = com.prism.muse.ui.theme.TextTertiary.copy(alpha = 0.5f),
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                        androidx.compose.material3.Text(
+                            "go back",
+                            color = com.prism.muse.ui.theme.LocalPrismAccent.current,
+                            style = androidx.compose.material3.MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(top = 16.dp).clickable { navController.popBackStack() }
+                        )
+                    }
                 }
             }
         }
@@ -110,11 +127,24 @@ fun PrismNavHost(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    androidx.compose.material3.Text(
-                        "artist not found",
-                        color = com.prism.muse.ui.theme.TextTertiary
-                    )
-                    LaunchedEffect(Unit) { navController.popBackStack() }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        androidx.compose.material3.Text(
+                            "artist not found",
+                            color = com.prism.muse.ui.theme.TextTertiary
+                        )
+                        androidx.compose.material3.Text(
+                            "connect a server to load your library",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                            color = com.prism.muse.ui.theme.TextTertiary.copy(alpha = 0.5f),
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                        androidx.compose.material3.Text(
+                            "go back",
+                            color = com.prism.muse.ui.theme.LocalPrismAccent.current,
+                            style = androidx.compose.material3.MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(top = 16.dp).clickable { navController.popBackStack() }
+                        )
+                    }
                 }
             }
         }

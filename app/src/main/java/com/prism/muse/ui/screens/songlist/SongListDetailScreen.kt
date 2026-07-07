@@ -112,7 +112,7 @@ fun SongListDetailScreen(
                 }
             } else {
                 LazyColumn(
-                    contentPadding = PaddingValues(vertical = 4.dp),
+                    contentPadding = PaddingValues(start = 0.dp, top = 4.dp, end = 0.dp, bottom = 80.dp),
                     modifier = Modifier.weight(1f)
                 ) {
                     items(songs, key = { it.id }) { song ->

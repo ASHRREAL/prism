@@ -141,7 +141,7 @@ private fun PrismApp(playbackViewModel: PlaybackViewModel) {
         PrismNavHost(
             navController = navController,
             playbackViewModel = playbackViewModel,
-            contentPadding = PaddingValues(bottom = 72.dp),
+            contentPadding = PaddingValues(bottom = 80.dp),
             onOpenNowPlaying = { nowPlayingOpen = true },
             onOpenSettings = { settingsOpen = true },
             onOpenPlaylist = { playlist ->

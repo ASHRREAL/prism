@@ -42,6 +42,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -156,7 +157,11 @@ fun QueueScreen(viewModel: PlaybackViewModel, onBack: () -> Unit) {
                         })
                         SwipeToDismissBox(state = dismiss, enableDismissFromStartToEnd = false,
                             backgroundContent = {
-                                Box(Modifier.fillMaxSize().background(Color(0xFFD32F2F)))
+                                Box(Modifier.fillMaxSize().background(
+                                    Brush.horizontalGradient(
+                                        listOf(Color.Transparent, Color(0xFFD32F2F).copy(alpha = 0.6f), Color(0xFFD32F2F))
+                                    )
+                                ))
                             }
                         ) {
                             Box {

@@ -81,7 +81,7 @@ fun AlbumDetailScreen(
                     .padding(8.dp)
             )
 
-            LazyColumn(contentPadding = PaddingValues(bottom = 120.dp)) {
+            LazyColumn(contentPadding = PaddingValues(bottom = 100.dp)) {
                 item {
                     Row(
                         Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
