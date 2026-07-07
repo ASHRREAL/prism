@@ -368,33 +368,8 @@ class PlayerHolder(
     fun toggleShuffle() {
         val shuffle = !_state.value.shuffle
         _state.update { it.copy(shuffle = shuffle) }
-        // Shuffle is implemented by reordering the queue itself; enabling
-        // ExoPlayer's shuffleModeEnabled on top would shuffle the already
-        // shuffled list and desync the visible queue from playback order.
-        wasShuffled = true
-        if (shuffle) {
-            // Shuffle upcoming tracks without restarting current song
-            val s = _state.value
-            if (s.queue.size > 1) {
-                val current = s.current ?: return
-                val rest = s.queue.filterIndexed { i, _ -> i != s.currentIndex }.shuffled()
-                val newQueue = listOf(current) + rest
-                _state.update { it.copy(queue = newQueue, currentIndex = 0) }
-                if (!demoMode) {
-                    player.setMediaItems(newQueue.map(::toMediaItem), 0, (s.positionSec * 1000).toLong())
-                    player.playWhenReady = s.isPlaying
-                }
-            }
-        } else if (originalQueue.isNotEmpty()) {
-            val s = _state.value
-            val current = s.current ?: return
-            val origIndex = originalQueue.indexOfFirst { it.id == current.id }
-            _state.update { it.copy(queue = originalQueue.toList(), currentIndex = origIndex.coerceAtLeast(0)) }
-            if (!demoMode) {
-                player.setMediaItems(originalQueue.map(::toMediaItem), origIndex.coerceAtLeast(0), (s.positionSec * 1000).toLong())
-                player.playWhenReady = s.isPlaying
-            }
-        }
+        player.shuffleModeEnabled = shuffle
+        wasShuffled = shuffle
     }
 
     fun cycleRepeat() {
