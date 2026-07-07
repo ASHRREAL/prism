@@ -222,6 +222,24 @@ fun VisualizerScreen(
                                 )
                             }
                         }
+                        "pattern" -> {
+                            val cols = 8
+                            val rows = 6
+                            val cellW = w / cols
+                            val cellH = h / rows
+                            val maxR = min(cellW, cellH) * 0.35f
+                            for (c in 0 until cols) {
+                                for (r in 0 until rows) {
+                                    val idx = ((c * rows + r) * barCount / (cols * rows)).coerceIn(0, barCount - 1)
+                                    val lvl = levels[idx]
+                                    val cx = c * cellW + cellW / 2
+                                    val cy = r * cellH + cellH / 2
+                                    val r = (4f + lvl * maxR).coerceAtLeast(2f)
+                                    val alpha = (0.2f + lvl * 0.6f).coerceIn(0f, 1f)
+                                    drawCircle(accent.copy(alpha = alpha), r, Offset(cx, cy))
+                                }
+                            }
+                        }
                         else -> {
                             val minBar = 3f
                             for (i in 0 until barCount) {
@@ -266,7 +284,7 @@ fun VisualizerScreen(
                 Modifier.padding(start = 22.dp, bottom = 24.dp),
                 horizontalArrangement = Arrangement.spacedBy(26.dp)
             ) {
-                listOf("bars", "wave", "ring").forEach { s ->
+                listOf("bars", "wave", "ring", "pattern").forEach { s ->
                     Text(
                         s,
                         style = MaterialTheme.typography.bodyLarge,

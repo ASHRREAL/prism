@@ -348,6 +348,7 @@ private fun PrismApp(playbackViewModel: PlaybackViewModel) {
                     accent = seedColor(current.artUrl),
                     onTogglePlay = playbackViewModel::togglePlay,
                     onSkipNext = playbackViewModel::skipNext,
+                    onSkipPrevious = playbackViewModel::skipPrevious,
                     onExpand = { nowPlayingOpen = true },
                     modifier = Modifier.fillMaxWidth()
                 )

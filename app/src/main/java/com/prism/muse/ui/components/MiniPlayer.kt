@@ -2,10 +2,8 @@ package com.prism.muse.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -46,6 +44,7 @@ fun MiniPlayer(
     accent: androidx.compose.ui.graphics.Color,
     onTogglePlay: () -> Unit,
     onSkipNext: () -> Unit,
+    onSkipPrevious: () -> Unit,
     onExpand: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -67,23 +66,30 @@ fun MiniPlayer(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 10.dp)
-                .graphicsLayer { translationX = dragOffset }
                 .pointerInput(Unit) {
-                    // Swipe up to open Now Playing.
                     var up = 0f
                     detectVerticalDragGestures(
                         onDragEnd = { if (up < -60f) onExpand(); up = 0f },
                         onDragCancel = { up = 0f }
                     ) { _, dy -> up += dy }
                 }
-                .draggable(
-                    orientation = Orientation.Horizontal,
-                    state = rememberDraggableState { delta -> dragOffset += delta },
-                    onDragStopped = { velocity ->
-                        if (abs(dragOffset) > 120f || abs(velocity) > 900f) onSkipNext()
-                        dragOffset = 0f
+                .pointerInput(Unit) {
+                    var horiz = 0f
+                    dragOffset = 0f
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            if (abs(horiz) > 120f) {
+                                if (horiz > 0) onSkipPrevious() else onSkipNext()
+                            }
+                            horiz = 0f; dragOffset = 0f
+                        },
+                        onDragCancel = { horiz = 0f; dragOffset = 0f }
+                    ) { _, dx ->
+                        horiz += dx
+                        dragOffset = horiz / 3f
                     }
-                )
+                }
+                .graphicsLayer { translationX = dragOffset }
                 .clickable(onClick = onExpand),
             verticalAlignment = Alignment.CenterVertically
         ) {
