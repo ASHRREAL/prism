@@ -140,18 +140,6 @@ fun QueueScreen(viewModel: PlaybackViewModel, onBack: () -> Unit) {
                     val isCurrent = song.id == currentId
                     val isDragging = draggedIndex == realIdx
 
-                    if (isDragging && kotlin.math.abs(dragAccumY) > rowHeightPx * 0.5f) {
-                        val dir = if (dragAccumY > 0) 1 else -1
-                        val swapIdx = (realIdx + dir).coerceIn(0, queueList.lastIndex)
-                        if (swapIdx != realIdx && swapIdx != safeCurrentIndex) {
-                            val tmp = queueList[realIdx]
-                            queueList[realIdx] = queueList[swapIdx]
-                            queueList[swapIdx] = tmp
-                            draggedIndex = swapIdx
-                            dragAccumY -= dir * rowHeightPx
-                        }
-                    }
-
                     if (isCurrent) {
                         QueueRow(song, isCurrent = true, accent = accent, onClick = { viewModel.playAt(realIdx) })
                     } else {
@@ -178,7 +166,21 @@ fun QueueScreen(viewModel: PlaybackViewModel, onBack: () -> Unit) {
                                     isDragging = isDragging,
                                     dragOffset = if (isDragging) dragAccumY else 0f,
                                     onDragStart = { draggedIndex = realIdx; dragAccumY = 0f },
-                                    onDrag = { dy -> dragAccumY += dy },
+                                    onDrag = { dy ->
+                                        dragAccumY += dy
+                                        val i = realIdx
+                                        if (i >= 0 && kotlin.math.abs(dragAccumY) > rowHeightPx * 0.5f) {
+                                            val dir = if (dragAccumY > 0) 1 else -1
+                                            val swapIdx = (i + dir).coerceIn(0, queueList.lastIndex)
+                                            if (swapIdx != i && swapIdx != safeCurrentIndex) {
+                                                val tmp = queueList[i]
+                                                queueList[i] = queueList[swapIdx]
+                                                queueList[swapIdx] = tmp
+                                                draggedIndex = swapIdx
+                                                dragAccumY -= dir * rowHeightPx
+                                            }
+                                        }
+                                    },
                                     onDragEnd = { draggedIndex = -1; dragAccumY = 0f }
                                 )
                             }

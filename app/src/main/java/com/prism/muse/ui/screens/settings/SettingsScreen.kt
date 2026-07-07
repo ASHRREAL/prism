@@ -303,19 +303,6 @@ fun SettingsScreen(
                 val shown = tab in visibleTabs
                 val dragging = draggedTab == idx
 
-                // Swap during layout while a handle is held (mirrors the queue
-                // reorder); persistence happens on drag end.
-                if (dragging && kotlin.math.abs(tabDragAccum) > tabRowHeightPx * 0.5f) {
-                    val dir = if (tabDragAccum > 0) 1 else -1
-                    val target = (idx + dir).coerceIn(0, liveTabs.lastIndex)
-                    if (target != idx) {
-                        val moved = liveTabs.removeAt(idx)
-                        liveTabs.add(target, moved)
-                        draggedTab = target
-                        tabDragAccum -= dir * tabRowHeightPx
-                    }
-                }
-
                 fun toggle() {
                     val current = visibleTabs.toMutableSet()
                     if (tab in current) current.remove(tab) else current.add(tab)
@@ -370,6 +357,17 @@ fun SettingsScreen(
                                     ) { change, dy ->
                                         change.consume()
                                         tabDragAccum += dy
+                                        val i = liveTabs.indexOf(tab)
+                                        if (i >= 0 && kotlin.math.abs(tabDragAccum) > tabRowHeightPx * 0.5f) {
+                                            val dir = if (tabDragAccum > 0) 1 else -1
+                                            val target = (i + dir).coerceIn(0, liveTabs.lastIndex)
+                                            if (target != i) {
+                                                val moved = liveTabs.removeAt(i)
+                                                liveTabs.add(target, moved)
+                                                draggedTab = target
+                                                tabDragAccum -= dir * tabRowHeightPx
+                                            }
+                                        }
                                     }
                                 }
                         )

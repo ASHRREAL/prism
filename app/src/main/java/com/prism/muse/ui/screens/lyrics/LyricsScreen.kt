@@ -271,9 +271,10 @@ fun LyricsScreen(
                             // rows flash as a second "highlighted" line.
                             val targetScale = when {
                                 !active -> 1f
-                                lyricsStyle == "spotlight" -> 1.24f
-                                lyricsStyle == "fade" -> 1.06f
-                                else -> 1.18f
+                                lyricsStyle == "spotlight" -> 1.12f
+                                lyricsStyle == "fade" -> 1.04f
+                                lyricsStyle == "karaoke" -> 1f
+                                else -> 1f
                             }
                             val scale by animateFloatAsState(targetScale, tween(240), label = "lineScale")
                             val targetAlpha = when {
@@ -295,7 +296,7 @@ fun LyricsScreen(
                                     scaleX = scale
                                     scaleY = scale
                                     this.alpha = alpha
-                                    transformOrigin = TransformOrigin(0f, 0.5f)
+                                    transformOrigin = TransformOrigin(0.5f, 0.5f)
                                 }
                                 .clickable(enabled = current.synced && line.timeMs >= 0) {
                                     viewModel.seekTo(line.timeMs / 1000f)

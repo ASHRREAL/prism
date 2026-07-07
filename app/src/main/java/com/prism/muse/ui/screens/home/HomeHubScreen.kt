@@ -107,7 +107,7 @@ fun HomeHubScreen(
     val visibleTabs by graph.prefs.visibleTabs.collectAsState()
     val tabOrder by graph.prefs.tabOrder.collectAsState()
 
-    val panels = remember(visibleTabs, tabOrder) {
+    val panels = remember(tabOrder, visibleTabs) {
         tabOrder.filter { it in visibleTabs }.ifEmpty { tabOrder }
     }
     val pagerState = rememberPagerState(pageCount = { panels.size })
