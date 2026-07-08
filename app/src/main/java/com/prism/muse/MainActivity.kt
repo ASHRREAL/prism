@@ -218,6 +218,24 @@ private fun PrismApp(playbackViewModel: PlaybackViewModel) {
             }
         )
 
+        // Overlays (now playing, lyrics, settings, album/playlist lists …) render
+        // ON TOP of the nav content, so a back press must close the top overlay
+        // first. This handler is composed AFTER the NavHost, so while an overlay is
+        // open it out-ranks the NavHost's own back callback — otherwise back popped
+        // the album/screen underneath before closing the overlay.
+        BackHandler(enabled = overlayOpen) {
+            when {
+                queueOpen -> queueOpen = false
+                visOpen -> visOpen = false
+                eqOpen -> eqOpen = false
+                lyricsOpen -> lyricsOpen = false
+                nowPlayingOpen -> nowPlayingOpen = false
+                songListOpen -> songListOpen = false
+                loginOpen -> loginOpen = false
+                settingsOpen -> settingsOpen = false
+            }
+        }
+
         val currentArtUrl = playbackState.current?.artUrl
 
         // Layer 1: Settings / SongLists / Login (bottom layer)
