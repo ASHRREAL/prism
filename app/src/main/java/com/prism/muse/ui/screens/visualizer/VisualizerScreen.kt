@@ -211,145 +211,140 @@ fun VisualizerScreen(
                     }
                 }
 
-                // Animated Lissajous (a=1, b=2 → figure-8 / "infinity"). Layered as
-                // four time-offset echo trails each deformed by a different bin
-                // slice of the FFT, so the whole figure breathes asymmetrically
-                // instead of just one comet moving. The ratio between the two
-                // frequencies warbles slowly between 2 (figure-8) and ~2.7 so the
-                // loop subtly morphs between an infinity and a trefoil knot.
-                fun drawInfinity(
+                // "pattern" mode — an endless self-similar tunnel: nested rotating
+                // polygons that scale up geometrically and drift outward forever (a
+                // Droste / infinite-zoom loop that seamlessly reseeds at the centre).
+                // Each ring reads its own frequency bin so the whole lattice pulses.
+                // Not a true fractal, but it's self-similar and just keeps going.
+                fun drawTunnel(
                     amp: FloatArray,
-                    mainAlpha: Float,
-                    glowAlpha: Float,
                     phase: Float,
-                    radialBoost: Float
+                    mainAlpha: Float,
+                    glowAlpha: Float
                 ) {
-                    val cx = w / 2
-                    val cy = centerY
-                    val baseR = min(w, h) * 0.32f
                     val ampLen = amp.size
                     if (ampLen == 0) return
-                    val bRatio = 2f + 0.7f * (0.5f + 0.5f * sin(phase * 0.27f))
-                    val points = 220
+                    val cx = w / 2
+                    val cy = centerY
+                    val maxR = kotlin.math.hypot(w.toDouble(), h.toDouble()).toFloat() * 0.62f
                     val twoPi = 2f * Math.PI.toFloat()
+                    val sides = 6
+                    val ringCount = 16
+                    val ratio = 1.32f
+                    val baseR = 6f
+                    // Continuous 0..1 scroll: every ring grows toward the edge and
+                    // the lattice reseeds at the centre as the loop wraps — the
+                    // motion never stops or jumps.
+                    val zoom = (phase * 0.18f) % 1f
 
-                    fun trailPath(trailIdx: Int, trailPhase: Float): androidx.compose.ui.graphics.Path {
-                        val p = androidx.compose.ui.graphics.Path()
-                        // Each trail reads a shifted bin slice so it deforms in a
-                        // slightly different shape than its neighbours — gives the
-                        // figure a real "trailing echoes" feel rather than 4
-                        // identical stacked copies.
-                        val binOffset = trailIdx * (ampLen / 4)
-                        val scaleWobble = 1f + 0.04f * sin(phase * 1.8f + trailIdx)
-                        for (i in 0..points) {
-                            val u = (i.toFloat() / points) * twoPi
-                            val bin = ((i * ampLen / points + binOffset) % ampLen).coerceIn(0, ampLen - 1)
-                            val bulge = 1f + amp[bin] * radialBoost * scaleWobble
-                            val x = cx + baseR * bulge * sin(u + trailPhase)
-                            val y = cy + baseR * 0.62f * bulge * sin(bRatio * u + trailPhase * 0.5f)
-                            if (i == 0) p.moveTo(x, y) else p.lineTo(x, y)
+                    for (k in ringCount downTo 0) {
+                        val lvl = k + zoom
+                        val r = baseR * Math.pow(ratio.toDouble(), lvl.toDouble()).toFloat()
+                        if (r < 2f || r > maxR) continue
+                        val bin = ((k * ampLen) / ringCount).coerceIn(0, ampLen - 1)
+                        val rr = r * (1f + amp[bin] * 0.45f)
+                        // Each ring is rotated a touch more than the one inside it,
+                        // so the stack twists into a spiralling corridor.
+                        val rot = phase * 0.25f + k * 0.32f
+                        val path = androidx.compose.ui.graphics.Path()
+                        for (v in 0..sides) {
+                            val a = rot + v * (twoPi / sides)
+                            val x = cx + rr * cos(a)
+                            val y = cy + rr * sin(a)
+                            if (v == 0) path.moveTo(x, y) else path.lineTo(x, y)
                         }
-                        p.close()
-                        return p
-                    }
-
-                    // Echo trails back-to-front: outermost first (becomes the
-                    // background glow), innermost last (sharpest top layer).
-                    val trails = 4
-                    for (trail in trails - 1 downTo 0) {
-                        val trailPhase = phase - trail * 0.14f
-                        val path = trailPath(trail, trailPhase)
-                        val tAlpha = mainAlpha * (if (trail == 0) 1f else 0.32f - trail * 0.05f)
-                        if (trail == 0 && glowAlpha > 0f) {
-                            // Outer-most: layered glow rings for that video-scope bloom.
-                            drawPath(path, accent.copy(alpha = glowAlpha * 0.10f),
-                                style = androidx.compose.ui.graphics.drawscope.Stroke(22f, cap = StrokeCap.Round))
-                            drawPath(path, accent.copy(alpha = glowAlpha * 0.32f),
-                                style = androidx.compose.ui.graphics.drawscope.Stroke(11f, cap = StrokeCap.Round))
-                            drawPath(path, accent.copy(alpha = tAlpha),
-                                style = androidx.compose.ui.graphics.drawscope.Stroke(2.4f, cap = StrokeCap.Round))
-                        } else {
-                            drawPath(path, accent.copy(alpha = tAlpha),
-                                style = androidx.compose.ui.graphics.drawscope.Stroke(1.4f, cap = StrokeCap.Round))
+                        path.close()
+                        // Fade near the centre and the far edge so the corridor
+                        // dissolves into distance at both ends.
+                        val edge = (r / maxR).coerceIn(0f, 1f)
+                        val fade = sin(edge * Math.PI.toFloat()).coerceIn(0f, 1f)
+                        val a = mainAlpha * (0.18f + 0.82f * fade)
+                        val stroke = 1.4f + amp[bin] * 3.5f
+                        if (glowAlpha > 0f && amp[bin] > 0.28f) {
+                            drawPath(path, accent.copy(alpha = a * glowAlpha * 0.22f),
+                                style = androidx.compose.ui.graphics.drawscope.Stroke(stroke + 7f, cap = StrokeCap.Round))
                         }
-                    }
-
-                    // Comet dots — six chase points evenly distributed around the
-                    // loop, each pulsing with its own bin so all parts visibly move.
-                    val comets = 6
-                    for (k in 0 until comets) {
-                        val du = phase * 1.6f + k * (twoPi / comets)
-                        val binIdx = ((k * ampLen / comets) % ampLen).coerceIn(0, ampLen - 1)
-                        val a = 1f + amp[binIdx] * radialBoost
-                        val dx = cx + baseR * a * sin(du)
-                        val dy = cy + baseR * 0.62f * a * sin(bRatio * du + phase * 0.5f)
-                        // Pulse each comet's size with its own bin — the "infinite"
-                        // trail reads as many beads streaming around the curve.
-                        val pulse = 3f + 2.5f * (0.5f + 0.5f * sin(phase * 2.4f + k))
-                        val dim = if (k % 2 == 0) 1f else 0.55f
-                        drawCircle(accent.copy(alpha = mainAlpha * dim), pulse, Offset(dx, dy))
-                        // Spark on the loud comets.
-                        if (amp[binIdx] > 0.35f) {
-                            drawCircle(accent.copy(alpha = mainAlpha * 0.25f), pulse * 2.4f, Offset(dx, dy))
+                        drawPath(path, accent.copy(alpha = a),
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(stroke, cap = StrokeCap.Round))
+                        // Vertex nodes catch the light on loud bins.
+                        if (amp[bin] > 0.4f) {
+                            for (v in 0 until sides) {
+                                val a2 = rot + v * (twoPi / sides)
+                                drawCircle(accent.copy(alpha = a * 0.7f), stroke * 0.9f,
+                                    Offset(cx + rr * cos(a2), cy + rr * sin(a2)))
+                            }
                         }
                     }
-
-                    // Slow counter-rotating trefoil overlay (a=1, b=3) so the
-                    // figure has a second, slower-moving "ghost" shape behind it.
-                    val ghost = androidx.compose.ui.graphics.Path()
-                    for (i in 0..points) {
-                        val u = (i.toFloat() / points) * twoPi
-                        val x = cx + baseR * 0.78f * sin(u - phase * 0.4f)
-                        val y = cy + baseR * 0.50f * sin(3f * u + phase * 0.2f)
-                        if (i == 0) ghost.moveTo(x, y) else ghost.lineTo(x, y)
-                    }
-                    ghost.close()
-                    drawPath(ghost, accent.copy(alpha = mainAlpha * 0.18f),
-                        style = androidx.compose.ui.graphics.drawscope.Stroke(1.2f, cap = StrokeCap.Round))
                 }
 
                 if (hasFft && state.isPlaying) {
                     // Real FFT data, eased at 60fps
                     when (style) {
                         "wave" -> {
-                            val step = w / (barCount - 1)
-                            fun spectrumPath(sign: Float, amp: Float): androidx.compose.ui.graphics.Path {
+                            // Symmetric spectrum wave: bass at the centre, treble
+                            // radiating to both edges (mirrored left/right), and
+                            // reflected with equal amplitude above and below the
+                            // mid-line so it fills the whole canvas.
+                            val half = w / 2f
+                            fun ampAtX(x: Float): Float {
+                                val d = (abs(x - half) / half).coerceIn(0f, 1f)
+                                val idx = (d * (barCount - 1)).toInt().coerceIn(0, barCount - 1)
+                                return levels[idx]
+                            }
+                            fun wavePath(sign: Float, scale: Float): androidx.compose.ui.graphics.Path {
                                 val p = androidx.compose.ui.graphics.Path()
-                                p.moveTo(0f, centerY - sign * levels[0] * h * amp)
-                                for (i in 1 until barCount) {
-                                    p.lineTo(i * step, centerY - sign * levels[i] * h * amp)
+                                val steps = 72
+                                for (s in 0..steps) {
+                                    val x = s / steps.toFloat() * w
+                                    val y = centerY - sign * ampAtX(x) * h * scale
+                                    if (s == 0) p.moveTo(x, y) else p.lineTo(x, y)
                                 }
                                 return p
                             }
-                            drawLine(accent.copy(alpha = 0.15f), Offset(0f, centerY), Offset(w, centerY), 1.5f)
-                            drawPath(spectrumPath(1f, 0.38f), accent.copy(alpha = 0.85f),
+                            drawLine(accent.copy(alpha = 0.12f), Offset(0f, centerY), Offset(w, centerY), 1f)
+                            drawPath(wavePath(1f, 0.44f), accent.copy(alpha = 0.85f),
                                 style = androidx.compose.ui.graphics.drawscope.Stroke(3.5f, cap = StrokeCap.Round))
-                            drawPath(spectrumPath(-1f, 0.24f), accent.copy(alpha = 0.3f),
+                            drawPath(wavePath(-1f, 0.44f), accent.copy(alpha = 0.85f),
+                                style = androidx.compose.ui.graphics.drawscope.Stroke(3.5f, cap = StrokeCap.Round))
+                            drawPath(wavePath(1f, 0.28f), accent.copy(alpha = 0.3f),
+                                style = androidx.compose.ui.graphics.drawscope.Stroke(2.5f, cap = StrokeCap.Round))
+                            drawPath(wavePath(-1f, 0.28f), accent.copy(alpha = 0.3f),
                                 style = androidx.compose.ui.graphics.drawscope.Stroke(2.5f, cap = StrokeCap.Round))
                         }
                         "ring" -> {
+                            // Kaleidoscopic ring: bars radiate BOTH outward and
+                            // inward from the circle, mirrored around the vertical
+                            // axis so the spectrum wraps symmetrically all the way
+                            // around and fills the space around the centre.
                             val cx = w / 2
                             val cy = centerY
-                            val r0 = min(w, h) * 0.22f
-                            drawCircle(accent.copy(alpha = 0.18f), r0 - 8f, Offset(cx, cy),
-                                style = androidx.compose.ui.graphics.drawscope.Stroke(1.8f))
+                            val r0 = min(w, h) * 0.26f
+                            drawCircle(accent.copy(alpha = 0.15f), r0, Offset(cx, cy),
+                                style = androidx.compose.ui.graphics.drawscope.Stroke(1.5f))
                             val twoPi = 2f * Math.PI.toFloat()
-                            for (i in 0 until barCount) {
-                                val angle = (i.toFloat() / barCount) * twoPi - twoPi / 4
-                                val len = 6f + levels[i] * r0 * 1.15f
-                                drawLine(
-                                    accent.copy(alpha = 0.75f),
-                                    Offset(cx + cos(angle) * r0, cy + sin(angle) * r0),
-                                    Offset(cx + cos(angle) * (r0 + len), cy + sin(angle) * (r0 + len)),
-                                    5f, StrokeCap.Round
-                                )
+                            val count = barCount * 2
+                            for (i in 0 until count) {
+                                val angle = (i.toFloat() / count) * twoPi - twoPi / 4
+                                // Mirror the bins left/right for a symmetric bloom.
+                                val frac = abs((i.toFloat() / count) * 2f - 1f)
+                                val bin = (frac * (barCount - 1)).toInt().coerceIn(0, barCount - 1)
+                                val lvl = levels[bin]
+                                val out = 6f + lvl * r0 * 1.4f
+                                val inn = lvl * r0 * 0.6f
+                                val ca = cos(angle)
+                                val sa = sin(angle)
+                                drawLine(accent.copy(alpha = 0.78f),
+                                    Offset(cx + ca * r0, cy + sa * r0),
+                                    Offset(cx + ca * (r0 + out), cy + sa * (r0 + out)),
+                                    4f, StrokeCap.Round)
+                                drawLine(accent.copy(alpha = 0.4f),
+                                    Offset(cx + ca * r0, cy + sa * r0),
+                                    Offset(cx + ca * (r0 - inn), cy + sa * (r0 - inn)),
+                                    3f, StrokeCap.Round)
                             }
                         }
                         "pattern" -> {
-                            // Audio-reactive infinity curve — bins push the
-                            // figure-8 outward in time with the spectrum.
-                            val t = tick / 90f
-                            drawInfinity(levels, mainAlpha = 1f, glowAlpha = 1f, phase = t, radialBoost = 0.55f)
+                            drawTunnel(levels, phase = tick / 90f, mainAlpha = 1f, glowAlpha = 1f)
                         }
                         else -> {
                             drawLine(accent.copy(alpha = 0.12f), Offset(0f, centerY), Offset(w, centerY), 1f)
@@ -362,7 +357,7 @@ fun VisualizerScreen(
                     // denied or no session) — driven by the frame clock so it
                     // stays fluid instead of stepping with the position poller.
                     if (style == "pattern") {
-                        // Synthetic envelope so the figure-8 still breathes when
+                        // Synthetic envelope so the tunnel still breathes when
                         // there's no microphone capture to drive it.
                         val synth = FloatArray(barCount)
                         val t = tick / 30f
@@ -370,7 +365,7 @@ fun VisualizerScreen(
                             synth[i] = (0.25f + 0.35f * abs(sin(i * 0.30f + t * 0.9f) *
                                 cos(i * 0.18f + t * 0.6f))).coerceIn(0f, 1f)
                         }
-                        drawInfinity(synth, mainAlpha = 0.85f, glowAlpha = 0.6f, phase = tick / 90f, radialBoost = 0.4f)
+                        drawTunnel(synth, phase = tick / 90f, mainAlpha = 0.85f, glowAlpha = 0.6f)
                     } else {
                         val t = tick / 60f
                         drawMirroredBars(
@@ -387,7 +382,7 @@ fun VisualizerScreen(
                         for (i in 0 until barCount) {
                             synth[i] = (0.10f + 0.18f * abs(sin(i * 0.30f + t * 0.7f))).coerceIn(0f, 1f)
                         }
-                        drawInfinity(synth, mainAlpha = 0.4f, glowAlpha = 0.25f, phase = tick / 110f, radialBoost = 0.25f)
+                        drawTunnel(synth, phase = tick / 110f, mainAlpha = 0.4f, glowAlpha = 0.25f)
                     } else {
                         val t = tick / 60f
                         drawMirroredBars(

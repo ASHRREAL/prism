@@ -195,11 +195,17 @@ class PlayerHolder(
 
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (demoMode) return
-                // STATE_ENDED only fires for repeat OFF / ONCE (repeat-ALL loops
-                // internally via REPEAT_MODE_ALL and never ends). Shuffle no longer
-                // needs a custom lap restart here: the queue is physically shuffled
-                // in [toggleShuffle], so REPEAT_MODE_ALL simply replays that order.
+                // STATE_ENDED fires at the end of the queue for repeat OFF / ONCE,
+                // and also for repeat-ALL-with-shuffle (which we run as
+                // REPEAT_MODE_OFF on purpose). In the shuffle case we reshuffle the
+                // whole queue into a new order and restart the lap; otherwise we
+                // stop. Repeat-ALL without shuffle loops internally and never ends.
                 if (playbackState == Player.STATE_ENDED) {
+                    val s = _state.value
+                    if (s.repeat == RepeatMode.ALL && s.shuffle && s.queue.size > 1) {
+                        reshuffleOnReplay()
+                        return
+                    }
                     _state.update { it.copy(isPlaying = false) }
                     saveSession()
                 }
@@ -284,6 +290,40 @@ class PlayerHolder(
             vol *= Math.pow(10.0, song.trackGainDb / 20.0).toFloat().coerceIn(0f, 1f)
         }
         runCatching { player.volume = vol.coerceIn(0f, 1f) }
+    }
+
+    /**
+     * End-of-lap reshuffle for repeat-ALL + shuffle: rebuild the queue in a fresh
+     * random order (retried a few times so it differs from the lap that just
+     * played) and restart playback from slot 0. Because we play a physically
+     * shuffled list with `shuffleModeEnabled` off, each lap runs sequentially and
+     * the order visibly changes between repeats. Safe here because the previous
+     * item just ended — there's no in-progress playback to interrupt.
+     */
+    private fun reshuffleOnReplay() {
+        val s = _state.value
+        if (s.queue.size <= 1) {
+            _state.update { it.copy(currentIndex = 0, positionSec = 0f) }
+            return
+        }
+        var newQueue = s.queue.shuffled()
+        var attempts = 0
+        while (newQueue == s.queue && attempts < 5) {
+            newQueue = s.queue.shuffled()
+            attempts++
+        }
+        _state.update { it.copy(queue = newQueue, currentIndex = 0, positionSec = 0f) }
+        if (!demoMode) {
+            player.shuffleModeEnabled = false
+            player.setMediaItems(newQueue.map(::toMediaItem), 0, 0L)
+            // STATE_ENDED leaves the player idle; prepare() + play() starts the lap.
+            player.prepare()
+            player.playWhenReady = true
+            startService()
+        } else {
+            _state.update { it.copy(isPlaying = true) }
+        }
+        saveSession()
     }
 
     fun setQueue(songs: List<Song>, startIndex: Int = 0, play: Boolean = true) {
@@ -428,14 +468,18 @@ class PlayerHolder(
     }
 
     /**
-     * Maps the app's repeat mode to ExoPlayer's repeat mode. Shuffle is handled
-     * entirely by physically reordering the queue (see [toggleShuffle]), so
-     * repeat-ALL always maps straight to REPEAT_MODE_ALL and simply loops the
-     * shuffled order — no special-casing, no opaque internal shuffle to fight.
+     * Maps the app's repeat mode to ExoPlayer's repeat mode. Repeat-ALL with
+     * shuffle on runs as REPEAT_MODE_OFF on purpose: we want the STATE_ENDED
+     * signal at the end of each lap so we can reshuffle the whole queue into a
+     * *new* order before restarting (see [reshuffleOnReplay]) — that's what makes
+     * each repeat play the songs in a different order. Repeat-ALL without shuffle
+     * just loops the fixed order via REPEAT_MODE_ALL.
      */
     private fun applyRepeatMode() {
-        player.repeatMode = when (_state.value.repeat) {
-            RepeatMode.ALL -> Player.REPEAT_MODE_ALL
+        val s = _state.value
+        player.repeatMode = when {
+            s.repeat == RepeatMode.ALL && s.shuffle -> Player.REPEAT_MODE_OFF
+            s.repeat == RepeatMode.ALL -> Player.REPEAT_MODE_ALL
             else -> Player.REPEAT_MODE_OFF
         }
     }
@@ -530,9 +574,18 @@ class PlayerHolder(
         // Just played the last item: handle repeat modes.
         when (s.repeat) {
             RepeatMode.ALL -> {
-                // Loop back to the top of the (already shuffled, if shuffle is on)
-                // queue — same order every lap, mirroring the real-mode behavior.
-                _state.update { it.copy(currentIndex = 0, positionSec = 0f) }
+                if (s.shuffle && s.queue.size > 1) {
+                    // Reshuffle into a fresh order each lap so repeats differ.
+                    var newQueue = s.queue.shuffled()
+                    var attempts = 0
+                    while (newQueue == s.queue && attempts < 5) {
+                        newQueue = s.queue.shuffled()
+                        attempts++
+                    }
+                    _state.update { it.copy(queue = newQueue, currentIndex = 0, positionSec = 0f) }
+                } else {
+                    _state.update { it.copy(currentIndex = 0, positionSec = 0f) }
+                }
             }
             RepeatMode.ONCE, RepeatMode.OFF -> {
                 _state.update { it.copy(isPlaying = false, positionSec = 0f) }
