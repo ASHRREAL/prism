@@ -48,7 +48,9 @@ class LyricsRepository(private val api: SubsonicClient, private val prefs: AppPr
                             add(async { runCatching { lrclibSearch(song) }.getOrNull() })
                         }
                         if ("netease" in enabled) add(async { runCatching { neteaseLyrics(song) }.getOrNull() })
-                        if ("subsonic" in enabled) add(async { runCatching { api.getLyrics(song) }.getOrNull() })
+                        // Server-provided lyrics (Navidrome/Subsonic getLyrics) are
+                        // always tried — you're already connected, so it's free.
+                        add(async { runCatching { api.getLyrics(song) }.getOrNull() })
                         if ("genius" in enabled) add(async { runCatching { geniusLyrics(song) }.getOrNull() })
                         if ("lyrics.ovh" in enabled) add(async { runCatching { lyricsOvhLyrics(song) }.getOrNull() })
                     }

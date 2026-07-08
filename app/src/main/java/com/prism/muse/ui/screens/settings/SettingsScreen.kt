@@ -73,7 +73,11 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
 
     val server by prefs.server.collectAsState()
+    val serverType by prefs.serverType.collectAsState()
     val offline by prefs.offlineMode.collectAsState()
+    // A song in the mini player overlaps the bottom of the picker sheets — reserve
+    // room so the last option isn't hidden behind it.
+    val miniPlayerVisible = graph.player.state.collectAsState().value.current != null
     val gapless by prefs.gapless.collectAsState()
     val replayGain by prefs.replayGain.collectAsState()
     val crossfade by prefs.crossfadeSec.collectAsState()
@@ -135,6 +139,19 @@ fun SettingsScreen(
                 accentValue = server.isConfigured,
                 accent = accent,
                 onClick = onOpenAccounts
+            )
+            SettingRow(
+                "Server type",
+                "${serverType.replaceFirstChar { it.uppercase() }} ›",
+                accentValue = false,
+                accent = accent,
+                onClick = {
+                    picker = PickerData(
+                        title = "server type",
+                        options = listOf("Navidrome", "Subsonic"),
+                        selected = serverType.replaceFirstChar { it.uppercase() }
+                    ) { sel -> prefs.setServerType(sel.lowercase()) }
+                }
             )
             SettingRow(
                 "Offline mode",
@@ -406,7 +423,8 @@ fun SettingsScreen(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(VoidBlack)
                     .pointerInput(Unit) { detectTapGestures { /* consume */ } }
                     .navigationBarsPadding()
-                    .padding(horizontal = 24.dp, vertical = 18.dp)
+                    .padding(start = 24.dp, end = 24.dp, top = 18.dp,
+                        bottom = if (miniPlayerVisible) 84.dp else 18.dp)
             ) {
                 Text(p.title.uppercase(), style = TrackedLabel, color = TextTertiary)
                 HairlineDivider(Modifier.padding(top = 10.dp, bottom = 4.dp))
@@ -430,7 +448,6 @@ fun SettingsScreen(
             val providerLabels = mapOf(
                 "lrclib" to "LRCLIB · synced",
                 "netease" to "Netease · synced",
-                "subsonic" to "Subsonic / server",
                 "genius" to "Genius · text",
                 "lyrics.ovh" to "lyrics.ovh · text"
             )
@@ -442,7 +459,8 @@ fun SettingsScreen(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(VoidBlack)
                     .pointerInput(Unit) { detectTapGestures { /* consume */ } }
                     .navigationBarsPadding()
-                    .padding(horizontal = 24.dp, vertical = 18.dp)
+                    .padding(start = 24.dp, end = 24.dp, top = 18.dp,
+                        bottom = if (miniPlayerVisible) 84.dp else 18.dp)
             ) {
                 Text("LYRICS SOURCES · TAP TO TOGGLE", style = TrackedLabel, color = TextTertiary)
                 HairlineDivider(Modifier.padding(top = 10.dp, bottom = 4.dp))

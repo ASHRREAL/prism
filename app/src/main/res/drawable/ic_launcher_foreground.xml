@@ -1,52 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- prism mark: a white beam refracting through a glass prism into a cool
-     cyan→violet spectrum — "Prism Muse", matching the dark Metro / cyan theme. -->
+<!-- play mark: a play triangle foreshortened like the app's panorama tilt, given
+     depth by an extruded side face, a light top edge and a very faint shadow. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- glass prism body (subtle tinted fill) -->
-    <path
-        android:pathData="M54,29 L74,67 L34,67 Z"
-        android:fillColor="#16BFEAFF" />
+    <!-- horizontal foreshortening (scaleX) fakes the panorama rotateY tilt -->
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.94">
 
-    <!-- incoming beam: soft glow behind a crisp white core -->
-    <path
-        android:pathData="M15,40 L45,48"
-        android:strokeColor="#40FFFFFF"
-        android:strokeWidth="8"
-        android:strokeLineCap="round" />
-    <path
-        android:pathData="M15,40 L45,48"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="3.5"
-        android:strokeLineCap="round" />
+        <!-- very subtle cast shadow (barely there on the dark background) -->
+        <path
+            android:pathData="M47,39 L50,85 L86,62 Z"
+            android:fillColor="#40000000" />
 
-    <!-- light travelling through the glass, connecting entry to dispersion -->
-    <path
-        android:pathData="M45,48 L60,50"
-        android:strokeColor="#66E6F6FF"
-        android:strokeWidth="2.5"
-        android:strokeLineCap="round" />
+        <!-- extruded side face — the play button's thickness -->
+        <path
+            android:pathData="M44,35 L47,81 L83,58 Z"
+            android:fillColor="#17567F" />
 
-    <!-- refracted spectrum fanning out of the right face -->
-    <path android:pathData="M60,50 L80,42"
-        android:strokeColor="#9BE8FF" android:strokeWidth="3" android:strokeLineCap="round" />
-    <path android:pathData="M60,50 L82,50"
-        android:strokeColor="#3FB0F2" android:strokeWidth="3" android:strokeLineCap="round" />
-    <path android:pathData="M60,50 L80,58"
-        android:strokeColor="#5B7BFF" android:strokeWidth="3" android:strokeLineCap="round" />
-    <path android:pathData="M60,50 L77,65"
-        android:strokeColor="#9A63FF" android:strokeWidth="3" android:strokeLineCap="round" />
+        <!-- front face -->
+        <path
+            android:pathData="M40,30 L43,76 L79,53 Z"
+            android:fillColor="#3FB0F2" />
 
-    <!-- prism outline (crisp edges on top of the fill and beams) -->
-    <path
-        android:pathData="M54,29 L74,67 L34,67 Z"
-        android:strokeColor="#DCF2FF"
-        android:strokeWidth="3"
-        android:strokeLineJoin="round"
-        android:strokeLineCap="round"
-        android:fillColor="#00000000" />
+        <!-- top edge highlight -->
+        <path
+            android:pathData="M40,30 L79,53"
+            android:strokeColor="#BCE9FF"
+            android:strokeWidth="2"
+            android:strokeLineCap="round" />
+    </group>
 </vector>
