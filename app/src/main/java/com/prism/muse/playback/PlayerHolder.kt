@@ -403,58 +403,19 @@ class PlayerHolder(
      * media-item list in its original order and plays it in an opaque random
      * sequence — so `player.currentMediaItemIndex` (which we mirror into
      * `currentIndex`) jumped to seemingly random rows and the visible queue never
-     * matched what actually played next. By reordering the list ourselves and
-     * leaving `shuffleModeEnabled = false`, playback advances sequentially 0,1,2…
-     * through a queue whose visible order IS the play order, and repeat-ALL just
-     * loops that same shuffled order.
+     * matched what actually played next.
+     *
+     * Toggling shuffle now does NOT touch the current queue at all — the song you
+     * are on keeps playing in the exact order it is in. Shuffle is purely a flag
+     * that says "rebuild the queue in a fresh random order the next time repeat-all
+     * loops it" (see [reshuffleOnReplay]). So pressing shuffle mid-song is a no-op
+     * to the ear; the reshuffle only happens when the queue wraps.
      */
     fun toggleShuffle() {
-        val s = _state.value
-        val shuffle = !s.shuffle
-        val current = s.current
-
-        if (!shuffle) {
-            // Restore the original pre-shuffle order, keeping the current song.
-            val restored = originalQueue.ifEmpty { s.queue }
-            val newIdx = (current?.let { c -> restored.indexOfFirst { it.id == c.id } } ?: 0)
-                .coerceAtLeast(0)
-            _state.update { it.copy(queue = restored, currentIndex = newIdx, shuffle = false) }
-            reloadPlayerKeepingPlayback(restored, newIdx, s.positionSec, s.isPlaying)
-            applyRepeatMode()
-            return
-        }
-
-        if (current == null || s.queue.size <= 1) {
-            _state.update { it.copy(shuffle = true) }
-            player.shuffleModeEnabled = false
-            applyRepeatMode()
-            return
-        }
-
-        // Keep the current song exactly where it is and shuffle everything else
-        // into the remaining slots.
-        val curIdx = s.currentIndex
-        val rest = s.queue.filterIndexed { i, _ -> i != curIdx }.shuffled()
-        val newQueue = rest.toMutableList().apply { add(curIdx.coerceIn(0, size), current) }
-        val newIdx = curIdx.coerceIn(0, newQueue.lastIndex)
-        _state.update { it.copy(queue = newQueue, currentIndex = newIdx, shuffle = true) }
-        reloadPlayerKeepingPlayback(newQueue, newIdx, s.positionSec, s.isPlaying)
-        applyRepeatMode()
-    }
-
-    /**
-     * Swap the player's media items for [queue] starting at [index]/[positionSec]
-     * without a prepare() (which would interrupt the current track) — the current
-     * song keeps playing across a shuffle toggle or un-shuffle.
-     */
-    private fun reloadPlayerKeepingPlayback(
-        queue: List<Song>, index: Int, positionSec: Float, wasPlaying: Boolean
-    ) {
-        if (demoMode) { saveSession(); return }
+        val shuffle = !_state.value.shuffle
+        _state.update { it.copy(shuffle = shuffle) }
         player.shuffleModeEnabled = false
-        player.setMediaItems(queue.map(::toMediaItem), index, (positionSec * 1000).toLong())
-        player.playWhenReady = wasPlaying
-        saveSession()
+        applyRepeatMode()
     }
 
     fun cycleRepeat() {

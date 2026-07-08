@@ -40,6 +40,7 @@ import com.prism.muse.ui.theme.TextTertiary
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.sin
 import kotlinx.coroutines.delay
 
@@ -211,70 +212,80 @@ fun VisualizerScreen(
                     }
                 }
 
-                // "pattern" mode — an endless self-similar tunnel: nested rotating
-                // polygons that scale up geometrically and drift outward forever (a
-                // Droste / infinite-zoom loop that seamlessly reseeds at the centre).
-                // Each ring reads its own frequency bin so the whole lattice pulses.
-                // Not a true fractal, but it's self-similar and just keeps going.
-                fun drawTunnel(
+                // "pattern" mode — a ferrofluid droplet: a gooey metallic blob whose
+                // rim erupts into audio-reactive spikes (sharpened with a power curve
+                // so loud bins read as needles). Filled with a liquid-metal gradient
+                // plus a rim glow and a specular pool so it looks wet and 3D.
+                fun drawFerrofluid(
                     amp: FloatArray,
                     phase: Float,
                     mainAlpha: Float,
                     glowAlpha: Float
                 ) {
-                    val ampLen = amp.size
-                    if (ampLen == 0) return
+                    val n = amp.size
+                    if (n == 0) return
                     val cx = w / 2
                     val cy = centerY
-                    val maxR = kotlin.math.hypot(w.toDouble(), h.toDouble()).toFloat() * 0.62f
                     val twoPi = 2f * Math.PI.toFloat()
-                    val sides = 6
-                    val ringCount = 16
-                    val ratio = 1.32f
-                    val baseR = 6f
-                    // Continuous 0..1 scroll: every ring grows toward the edge and
-                    // the lattice reseeds at the centre as the loop wraps — the
-                    // motion never stops or jumps.
-                    val zoom = (phase * 0.18f) % 1f
+                    val baseR = min(w, h) * 0.17f
+                    val maxSpike = min(w, h) * 0.32f
+                    val points = 256
+                    val spin = phase * 0.15f
 
-                    for (k in ringCount downTo 0) {
-                        val lvl = k + zoom
-                        val r = baseR * Math.pow(ratio.toDouble(), lvl.toDouble()).toFloat()
-                        if (r < 2f || r > maxR) continue
-                        val bin = ((k * ampLen) / ringCount).coerceIn(0, ampLen - 1)
-                        val rr = r * (1f + amp[bin] * 0.45f)
-                        // Each ring is rotated a touch more than the one inside it,
-                        // so the stack twists into a spiralling corridor.
-                        val rot = phase * 0.25f + k * 0.32f
-                        val path = androidx.compose.ui.graphics.Path()
-                        for (v in 0..sides) {
-                            val a = rot + v * (twoPi / sides)
-                            val x = cx + rr * cos(a)
-                            val y = cy + rr * sin(a)
-                            if (v == 0) path.moveTo(x, y) else path.lineTo(x, y)
-                        }
-                        path.close()
-                        // Fade near the centre and the far edge so the corridor
-                        // dissolves into distance at both ends.
-                        val edge = (r / maxR).coerceIn(0f, 1f)
-                        val fade = sin(edge * Math.PI.toFloat()).coerceIn(0f, 1f)
-                        val a = mainAlpha * (0.18f + 0.82f * fade)
-                        val stroke = 1.4f + amp[bin] * 3.5f
-                        if (glowAlpha > 0f && amp[bin] > 0.28f) {
-                            drawPath(path, accent.copy(alpha = a * glowAlpha * 0.22f),
-                                style = androidx.compose.ui.graphics.drawscope.Stroke(stroke + 7f, cap = StrokeCap.Round))
-                        }
-                        drawPath(path, accent.copy(alpha = a),
-                            style = androidx.compose.ui.graphics.drawscope.Stroke(stroke, cap = StrokeCap.Round))
-                        // Vertex nodes catch the light on loud bins.
-                        if (amp[bin] > 0.4f) {
-                            for (v in 0 until sides) {
-                                val a2 = rot + v * (twoPi / sides)
-                                drawCircle(accent.copy(alpha = a * 0.7f), stroke * 0.9f,
-                                    Offset(cx + rr * cos(a2), cy + rr * sin(a2)))
-                            }
-                        }
+                    // Radius as a function of angle: a mirrored, interpolated bin
+                    // sample (so the blob is left/right symmetric and smooth),
+                    // sharpened into spikes, plus two rotating harmonics so the
+                    // membrane keeps rippling even when the audio is quiet.
+                    fun radiusAt(u: Float): Float {
+                        val frac = abs(((u / twoPi) % 1f) * 2f - 1f)
+                        val fi = frac * (n - 1)
+                        val i0 = fi.toInt().coerceIn(0, n - 1)
+                        val i1 = (i0 + 1).coerceAtMost(n - 1)
+                        val lvl = amp[i0] + (amp[i1] - amp[i0]) * (fi - i0)
+                        val spike = lvl.pow(1.7f)
+                        val wobble = 0.08f * (sin(u * 5f + phase * 1.3f) + 0.5f * sin(u * 9f - phase))
+                        return baseR * (1f + wobble) + maxSpike * spike
                     }
+
+                    val path = androidx.compose.ui.graphics.Path()
+                    for (i in 0..points) {
+                        val u = (i.toFloat() / points) * twoPi
+                        val r = radiusAt(u)
+                        val x = cx + r * cos(u + spin)
+                        val y = cy + r * sin(u + spin)
+                        if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                    }
+                    path.close()
+
+                    // Under-glow bloom.
+                    if (glowAlpha > 0f) {
+                        drawPath(path, accent.copy(alpha = glowAlpha * 0.12f),
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(26f, cap = StrokeCap.Round))
+                        drawPath(path, accent.copy(alpha = glowAlpha * 0.22f),
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(12f, cap = StrokeCap.Round))
+                    }
+                    // Liquid-metal body — lit from the top-left.
+                    val fill = androidx.compose.ui.graphics.Brush.radialGradient(
+                        colors = listOf(
+                            androidx.compose.ui.graphics.lerp(accent, Color.White, 0.35f).copy(alpha = mainAlpha),
+                            accent.copy(alpha = mainAlpha * 0.9f),
+                            androidx.compose.ui.graphics.lerp(accent, Color.Black, 0.5f).copy(alpha = mainAlpha * 0.95f)
+                        ),
+                        center = Offset(cx - baseR * 0.3f, cy - baseR * 0.5f),
+                        radius = baseR + maxSpike * 0.9f
+                    )
+                    drawPath(path, fill)
+                    // Bright wet rim.
+                    drawPath(
+                        path,
+                        androidx.compose.ui.graphics.lerp(accent, Color.White, 0.4f).copy(alpha = mainAlpha * 0.9f),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(1.6f, cap = StrokeCap.Round)
+                    )
+                    // Specular pool (kept near the core so it stays inside the body).
+                    drawCircle(Color.White.copy(alpha = mainAlpha * 0.16f), baseR * 0.42f,
+                        Offset(cx - baseR * 0.3f, cy - baseR * 0.5f))
+                    drawCircle(Color.White.copy(alpha = mainAlpha * 0.5f), baseR * 0.12f,
+                        Offset(cx - baseR * 0.36f, cy - baseR * 0.58f))
                 }
 
                 if (hasFft && state.isPlaying) {
@@ -344,7 +355,7 @@ fun VisualizerScreen(
                             }
                         }
                         "pattern" -> {
-                            drawTunnel(levels, phase = tick / 90f, mainAlpha = 1f, glowAlpha = 1f)
+                            drawFerrofluid(levels, phase = tick / 90f, mainAlpha = 1f, glowAlpha = 1f)
                         }
                         else -> {
                             drawLine(accent.copy(alpha = 0.12f), Offset(0f, centerY), Offset(w, centerY), 1f)
@@ -357,7 +368,7 @@ fun VisualizerScreen(
                     // denied or no session) — driven by the frame clock so it
                     // stays fluid instead of stepping with the position poller.
                     if (style == "pattern") {
-                        // Synthetic envelope so the tunnel still breathes when
+                        // Synthetic envelope so the droplet still breathes when
                         // there's no microphone capture to drive it.
                         val synth = FloatArray(barCount)
                         val t = tick / 30f
@@ -365,7 +376,7 @@ fun VisualizerScreen(
                             synth[i] = (0.25f + 0.35f * abs(sin(i * 0.30f + t * 0.9f) *
                                 cos(i * 0.18f + t * 0.6f))).coerceIn(0f, 1f)
                         }
-                        drawTunnel(synth, phase = tick / 90f, mainAlpha = 0.85f, glowAlpha = 0.6f)
+                        drawFerrofluid(synth, phase = tick / 90f, mainAlpha = 0.85f, glowAlpha = 0.6f)
                     } else {
                         val t = tick / 60f
                         drawMirroredBars(
@@ -382,7 +393,7 @@ fun VisualizerScreen(
                         for (i in 0 until barCount) {
                             synth[i] = (0.10f + 0.18f * abs(sin(i * 0.30f + t * 0.7f))).coerceIn(0f, 1f)
                         }
-                        drawTunnel(synth, phase = tick / 110f, mainAlpha = 0.4f, glowAlpha = 0.25f)
+                        drawFerrofluid(synth, phase = tick / 110f, mainAlpha = 0.4f, glowAlpha = 0.25f)
                     } else {
                         val t = tick / 60f
                         drawMirroredBars(

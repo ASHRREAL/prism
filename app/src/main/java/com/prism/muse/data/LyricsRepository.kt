@@ -43,6 +43,10 @@ class LyricsRepository(private val api: SubsonicClient, private val prefs: AppPr
                         async { runCatching { lrclibSearch(song) }.getOrNull() },
                         async { runCatching { neteaseLyrics(song) }.getOrNull() },
                         async { runCatching { api.getLyrics(song) }.getOrNull() },
+                        // Genius has by far the widest catalogue (niche / electronic
+                        // tracks that lrclib & netease miss) — text-only, so it ranks
+                        // below the synced sources but above the last-ditch ones.
+                        async { runCatching { geniusLyrics(song) }.getOrNull() },
                         async { runCatching { lyricsOvhLyrics(song) }.getOrNull() }
                     )
                     var best: Lyrics? = null
@@ -94,18 +98,40 @@ class LyricsRepository(private val api: SubsonicClient, private val prefs: AppPr
             })
         }
 
-    /** `[mm:ss.xx]text` LRC lines; compiled once instead of per input line. */
-    private val lrcLineRegex = Regex("""\[(\d+):(\d+(?:\.\d+)?)\](.*)""")
-    private val lrcWordTagRegex = Regex("""<\d+:\d+(?:\.\d+)?>""")
+    /** A single `[mm:ss.xx]` (or `[mm:ss:xx]`) timestamp tag anywhere in a line. */
+    private val lrcTimeTagRegex = Regex("""\[(\d{1,2}):(\d{1,2}(?:[.:]\d{1,3})?)\]""")
+    private val lrcWordTagRegex = Regex("""<\d+:\d+(?:[.:]\d+)?>""")
 
-    private fun parseLrc(raw: String): List<LyricLine> =
-        raw.lines().filter { it.isNotBlank() }.mapNotNull { line ->
-            val match = lrcLineRegex.find(line.trim()) ?: return@mapNotNull null
-            val min = match.groupValues[1].toFloatOrNull() ?: return@mapNotNull null
-            val sec = match.groupValues[2].toFloatOrNull() ?: return@mapNotNull null
-            val text = match.groupValues[3].replace(lrcWordTagRegex, "").trim()
-            LyricLine(((min * 60 + sec) * 1000).toLong(), text)
+    /**
+     * Parses an LRC blob into time-sorted lines. Handles the awkward cases that
+     * used to make the highlight stick then race:
+     *  - multiple timestamps on one line (`[t1][t2]chorus`) → one entry per time,
+     *  - `[mm:ss:xx]` colon-hundredths as well as `[mm:ss.xx]`,
+     *  - metadata tags (`[ar:…]`, `[offset:…]`) are ignored (non-numeric),
+     *  - the result is SORTED by time, so the active-line scan is monotonic.
+     * Blank/instrumental marker lines are dropped so the highlight never parks on
+     * an empty line.
+     */
+    private fun parseLrc(raw: String): List<LyricLine> {
+        val out = ArrayList<LyricLine>()
+        for (rawLine in raw.lines()) {
+            val line = rawLine.trim()
+            if (line.isEmpty()) continue
+            val tags = lrcTimeTagRegex.findAll(line).toList()
+            if (tags.isEmpty()) continue
+            // Text is whatever follows the last timestamp tag on the line.
+            val text = line.substring(tags.last().range.last + 1)
+                .replace(lrcWordTagRegex, "").trim()
+            if (text.isEmpty()) continue
+            for (tag in tags) {
+                val min = tag.groupValues[1].toLongOrNull() ?: continue
+                val sec = tag.groupValues[2].replace(':', '.').toDoubleOrNull() ?: continue
+                out.add(LyricLine(((min * 60 + sec) * 1000).toLong(), text))
+            }
         }
+        out.sortBy { it.timeMs }
+        return out
+    }
 
     fun clearCache() {
         cache.clear()
@@ -167,6 +193,79 @@ class LyricsRepository(private val api: SubsonicClient, private val prefs: AppPr
         if (lines.isEmpty()) return null
         return Lyrics(lines = lines, synced = false, source = "lyrics.ovh")
     }
+
+    /**
+     * Genius — the broadest catalogue of the lot (indie/electronic tracks the
+     * other providers don't index), but plain text only (no line timing). Uses
+     * Genius's keyless public search endpoint, then scrapes the song page.
+     */
+    private suspend fun geniusLyrics(song: Song): Lyrics? {
+        val q = java.net.URLEncoder.encode("${song.artist} ${song.title}", "UTF-8")
+        val searchBody = httpGet("https://genius.com/api/search?q=$q", referer = "https://genius.com/")
+            ?: return null
+        val hits = JSONObject(searchBody).optJSONObject("response")?.optJSONArray("hits")
+        if (hits == null || hits.length() == 0) return null
+        var pageUrl: String? = null
+        for (i in 0 until hits.length()) {
+            val hit = hits.getJSONObject(i)
+            if (hit.optString("type") != "song") continue
+            val url = hit.optJSONObject("result")?.optString("url").orEmpty()
+            if (url.isNotBlank()) { pageUrl = url; break }
+        }
+        val url = pageUrl ?: return null
+        val html = httpGet(url, referer = "https://genius.com/") ?: return null
+        val text = extractGeniusLyrics(html) ?: return null
+        val lines = text.lines().map { it.trim() }.filter { it.isNotBlank() && !it.startsWith("[") }
+            .mapIndexed { i, l -> LyricLine((i * 5000L), l) }
+        if (lines.isEmpty()) return null
+        return Lyrics(lines, synced = false, source = "genius")
+    }
+
+    /**
+     * Pulls the lyric text out of a Genius song page. Lyrics live inside one or
+     * more `<div data-lyrics-container="true">…</div>` blocks that can nest other
+     * divs (annotations), so we brace-match `<div>`/`</div>` to find each block's
+     * real end instead of a naive non-greedy regex. Then `<br>` → newline, strip
+     * remaining tags, decode entities.
+     */
+    private fun extractGeniusLyrics(html: String): String? {
+        val marker = "data-lyrics-container=\"true\""
+        val sb = StringBuilder()
+        var searchFrom = 0
+        while (true) {
+            val markerIdx = html.indexOf(marker, searchFrom)
+            if (markerIdx < 0) break
+            val contentStart = html.indexOf('>', markerIdx)
+            if (contentStart < 0) break
+            var depth = 1
+            var i = contentStart + 1
+            val begin = i
+            while (i < html.length && depth > 0) {
+                val nextOpen = html.indexOf("<div", i, ignoreCase = true)
+                val nextClose = html.indexOf("</div", i, ignoreCase = true)
+                if (nextClose < 0) { i = html.length; break }
+                if (nextOpen in 0 until nextClose) {
+                    depth++
+                    i = nextOpen + 4
+                } else {
+                    depth--
+                    i = nextClose + 5
+                    if (depth == 0) sb.append(html.substring(begin, nextClose)).append('\n')
+                }
+            }
+            searchFrom = i
+        }
+        if (sb.isEmpty()) return null
+        val withBreaks = sb.toString().replace(Regex("""<br\s*/?>""", RegexOption.IGNORE_CASE), "\n")
+        val noTags = withBreaks.replace(Regex("""<[^>]+>"""), "")
+        return decodeHtmlEntities(noTags).trim().ifBlank { null }
+    }
+
+    private fun decodeHtmlEntities(s: String): String =
+        s.replace("&amp;", "&")
+            .replace("&#x27;", "'").replace("&#39;", "'").replace("&rsquo;", "’")
+            .replace("&quot;", "\"").replace("&#34;", "\"")
+            .replace("&gt;", ">").replace("&lt;", "<").replace("&nbsp;", " ")
 
     /** Netease Cloud Music API — better coverage for Japanese/Vocaloid songs. */
     private suspend fun neteaseLyrics(song: Song): Lyrics? {
