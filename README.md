@@ -9,7 +9,6 @@ An Android music player for Navidrome / Subsonic, built with Jetpack Compose des
   <img src="screenshots/03_lyrics.jpg" width="22%" alt="Lyrics">
 </p>
 
-
 ## Stack
 
 - Kotlin + Jetpack Compose (BOM 2025.02)
