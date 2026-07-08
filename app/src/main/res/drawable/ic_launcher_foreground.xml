@@ -9,13 +9,13 @@
     <!-- cyan accent wedge tucked into the play's lower-left corner -->
     <path
         android:fillColor="#38A8E8"
-        android:pathData="M46.5,57.5 L46.5,66 L56.5,60.4 Z" />
+        android:pathData="M40.5,60.5 L40.5,75.5 L58.5,65.5 Z" />
 
-    <!-- outlined play triangle -->
+    <!-- outlined play triangle — enlarged ~1.8x around center so it fills more of the icon -->
     <path
-        android:pathData="M46.5,41 L69.5,54 L46.5,67 Z"
+        android:pathData="M40.5,30.5 L82,54 L40.5,77.5 Z"
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="4"
+        android:strokeWidth="5.5"
         android:strokeLineJoin="round"
         android:strokeLineCap="round"
         android:fillColor="#00000000" />

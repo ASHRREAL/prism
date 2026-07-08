@@ -35,12 +35,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
@@ -310,32 +309,27 @@ fun LyricsScreen(
                             if (active && current.synced && lyricsStyle == "karaoke") {
                                 val startT = line.timeMs
                                 val end = current.lines.getOrNull(index + 1)?.timeMs ?: (startT + 3000L)
-                                // smoothPosMs already advances at 60fps — no extra
-                                // per-item animation (those lagged and ghosted).
+                                // Purely time-driven off the 60fps playback clock
+                                // (never the audio): the fill glides across the line
+                                // over its own duration.
                                 val a = if (end > startT)
                                     ((smoothPosMs - startT).toFloat() / (end - startT)).coerceIn(0f, 1f)
                                 else 1f
-                                val dim = TextSecondary.copy(alpha = 0.45f)
-                                // Word by word: light a word once the timeline sweep
-                                // reaches its first character (time budgeted across
-                                // the line by character count). Only this one line is
-                                // ever lit, and it never spills onto the row below.
-                                val tokens = line.text.split(" ")
-                                val sung = a * line.text.length.coerceAtLeast(1)
-                                val annotated = buildAnnotatedString {
-                                    var cursor = 0
-                                    tokens.forEachIndexed { ti, token ->
-                                        val lit = cursor < sung
-                                        withStyle(SpanStyle(color = if (lit) TextPrimary else dim)) {
-                                            append(token)
-                                        }
-                                        if (ti < tokens.lastIndex) {
-                                            withStyle(SpanStyle(color = dim)) { append(" ") }
-                                        }
-                                        cursor += token.length + 1
-                                    }
-                                }
-                                Text(annotated, style = baseStyle, modifier = clickMod)
+                                val dim = TextSecondary.copy(alpha = 0.4f)
+                                // A soft-edged horizontal sweep: a narrow blend band
+                                // rides just ahead of the fill so the highlight
+                                // glides continuously instead of snapping word to
+                                // word — smooth, and only this one line is ever lit.
+                                val edge = (a + 0.06f).coerceAtMost(1f)
+                                val brush = Brush.horizontalGradient(
+                                    colorStops = arrayOf(
+                                        0f to TextPrimary,
+                                        a to TextPrimary,
+                                        edge to dim,
+                                        1f to dim
+                                    )
+                                )
+                                Text(line.text, style = baseStyle.merge(TextStyle(brush = brush)), modifier = clickMod)
                             } else {
                                 Text(
                                     line.text,

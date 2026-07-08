@@ -212,10 +212,10 @@ fun VisualizerScreen(
                     }
                 }
 
-                // "pattern" mode — a ferrofluid droplet: a gooey metallic blob whose
-                // rim erupts into audio-reactive spikes (sharpened with a power curve
-                // so loud bins read as needles). Filled with a liquid-metal gradient
-                // plus a rim glow and a specular pool so it looks wet and 3D.
+                // "ferrofluid" mode — a gooey metallic droplet whose whole rim churns
+                // and erupts into audio-reactive spikes (sharpened with a power curve
+                // so loud bins read as needles). Filled with a flat liquid-metal
+                // gradient + a wet rim glow — no central highlight.
                 fun drawFerrofluid(
                     amp: FloatArray,
                     phase: Float,
@@ -232,18 +232,20 @@ fun VisualizerScreen(
                     val points = 256
                     val spin = phase * 0.15f
 
-                    // Radius as a function of angle: a mirrored, interpolated bin
-                    // sample (so the blob is left/right symmetric and smooth),
-                    // sharpened into spikes, plus two rotating harmonics so the
-                    // membrane keeps rippling even when the audio is quiet.
+                    // Radius as a function of angle: an interpolated bin sample that
+                    // wraps around the FULL circle (no left/right mirroring) so every
+                    // part of the rim reacts independently, plus three travelling
+                    // wave harmonics so the whole membrane is always churning — even
+                    // the quiet stretches drift instead of sitting still.
                     fun radiusAt(u: Float): Float {
-                        val frac = abs(((u / twoPi) % 1f) * 2f - 1f)
-                        val fi = frac * (n - 1)
-                        val i0 = fi.toInt().coerceIn(0, n - 1)
-                        val i1 = (i0 + 1).coerceAtMost(n - 1)
-                        val lvl = amp[i0] + (amp[i1] - amp[i0]) * (fi - i0)
+                        val fi = (u / twoPi) * n
+                        val i0 = fi.toInt().mod(n)
+                        val i1 = (i0 + 1).mod(n)
+                        val lvl = amp[i0] + (amp[i1] - amp[i0]) * (fi - kotlin.math.floor(fi))
                         val spike = lvl.pow(1.7f)
-                        val wobble = 0.08f * (sin(u * 5f + phase * 1.3f) + 0.5f * sin(u * 9f - phase))
+                        val wobble = 0.11f * sin(u * 3f + phase * 1.7f) +
+                            0.06f * sin(u * 7f - phase * 1.1f) +
+                            0.04f * sin(u * 11f + phase * 0.7f)
                         return baseR * (1f + wobble) + maxSpike * spike
                     }
 
@@ -264,14 +266,15 @@ fun VisualizerScreen(
                         drawPath(path, accent.copy(alpha = glowAlpha * 0.22f),
                             style = androidx.compose.ui.graphics.drawscope.Stroke(12f, cap = StrokeCap.Round))
                     }
-                    // Liquid-metal body — lit from the top-left.
+                    // Liquid-metal body — a flat metallic fill that darkens toward
+                    // the rim (no bright centre glow, just depth on the edges).
                     val fill = androidx.compose.ui.graphics.Brush.radialGradient(
                         colors = listOf(
-                            androidx.compose.ui.graphics.lerp(accent, Color.White, 0.35f).copy(alpha = mainAlpha),
-                            accent.copy(alpha = mainAlpha * 0.9f),
-                            androidx.compose.ui.graphics.lerp(accent, Color.Black, 0.5f).copy(alpha = mainAlpha * 0.95f)
+                            androidx.compose.ui.graphics.lerp(accent, Color.White, 0.10f).copy(alpha = mainAlpha),
+                            accent.copy(alpha = mainAlpha * 0.92f),
+                            androidx.compose.ui.graphics.lerp(accent, Color.Black, 0.55f).copy(alpha = mainAlpha)
                         ),
-                        center = Offset(cx - baseR * 0.3f, cy - baseR * 0.5f),
+                        center = Offset(cx, cy),
                         radius = baseR + maxSpike * 0.9f
                     )
                     drawPath(path, fill)
@@ -281,11 +284,6 @@ fun VisualizerScreen(
                         androidx.compose.ui.graphics.lerp(accent, Color.White, 0.4f).copy(alpha = mainAlpha * 0.9f),
                         style = androidx.compose.ui.graphics.drawscope.Stroke(1.6f, cap = StrokeCap.Round)
                     )
-                    // Specular pool (kept near the core so it stays inside the body).
-                    drawCircle(Color.White.copy(alpha = mainAlpha * 0.16f), baseR * 0.42f,
-                        Offset(cx - baseR * 0.3f, cy - baseR * 0.5f))
-                    drawCircle(Color.White.copy(alpha = mainAlpha * 0.5f), baseR * 0.12f,
-                        Offset(cx - baseR * 0.36f, cy - baseR * 0.58f))
                 }
 
                 if (hasFft && state.isPlaying) {
@@ -354,7 +352,7 @@ fun VisualizerScreen(
                                     3f, StrokeCap.Round)
                             }
                         }
-                        "pattern" -> {
+                        "ferrofluid" -> {
                             drawFerrofluid(levels, phase = tick / 90f, mainAlpha = 1f, glowAlpha = 1f)
                         }
                         else -> {
@@ -367,7 +365,7 @@ fun VisualizerScreen(
                     // Fallback: wave-based animation if no FFT (mic permission
                     // denied or no session) — driven by the frame clock so it
                     // stays fluid instead of stepping with the position poller.
-                    if (style == "pattern") {
+                    if (style == "ferrofluid") {
                         // Synthetic envelope so the droplet still breathes when
                         // there's no microphone capture to drive it.
                         val synth = FloatArray(barCount)
@@ -387,7 +385,7 @@ fun VisualizerScreen(
                     }
                 } else {
                     // Idle: subtle ripple
-                    if (style == "pattern") {
+                    if (style == "ferrofluid") {
                         val synth = FloatArray(barCount)
                         val t = tick / 60f
                         for (i in 0 until barCount) {
@@ -409,7 +407,7 @@ fun VisualizerScreen(
                 Modifier.padding(start = 22.dp, bottom = 24.dp),
                 horizontalArrangement = Arrangement.spacedBy(26.dp)
             ) {
-                listOf("bars", "wave", "ring", "pattern").forEach { s ->
+                listOf("bars", "wave", "ring", "ferrofluid").forEach { s ->
                     Text(
                         s,
                         style = MaterialTheme.typography.bodyLarge,

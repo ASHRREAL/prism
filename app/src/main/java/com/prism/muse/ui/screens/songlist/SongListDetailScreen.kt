@@ -95,7 +95,10 @@ fun SongListDetailScreen(
                 }
             } else {
                 LazyColumn(
-                    contentPadding = PaddingValues(start = 0.dp, top = 4.dp, end = 0.dp, bottom = 80.dp),
+                    // Inset the rows to the same left/right margin as the title,
+                    // action row and divider above (they use 20.dp) — the rows
+                    // used to sit flush against the screen edge.
+                    contentPadding = PaddingValues(start = 20.dp, top = 4.dp, end = 20.dp, bottom = 80.dp),
                     modifier = Modifier.weight(1f)
                         .then(if (depthEffect) Modifier.gyroTilt(maxDegrees = 4f) else Modifier)
                 ) {
