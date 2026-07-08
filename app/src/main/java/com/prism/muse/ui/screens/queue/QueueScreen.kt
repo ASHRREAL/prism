@@ -40,13 +40,19 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
@@ -106,6 +112,33 @@ fun QueueScreen(viewModel: PlaybackViewModel, onBack: () -> Unit) {
         }
     }
 
+    // Pull-down-to-close: only when the list is already scrolled to the very top,
+    // a downward over-scroll that isn't consumed by the list accumulates, and a
+    // release past the threshold drops back to Now Playing. Uses nested scroll so
+    // it never fights the list's own scrolling mid-list.
+    val onBackUpdated = rememberUpdatedState(onBack)
+    val pullToClose = remember(listState) {
+        object : NestedScrollConnection {
+            var pull = 0f
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (source == NestedScrollSource.UserInput && available.y > 0f &&
+                    draggedId == null &&
+                    listState.firstVisibleItemIndex == 0 &&
+                    listState.firstVisibleItemScrollOffset == 0
+                ) {
+                    pull += available.y
+                }
+                return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (pull > 180f) onBackUpdated.value()
+                pull = 0f
+                return Velocity.Zero
+            }
+        }
+    }
+
     PlayerBackdrop(artUrl = state.current?.artUrl) {
         Column(
             Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()
@@ -141,13 +174,7 @@ fun QueueScreen(viewModel: PlaybackViewModel, onBack: () -> Unit) {
 
             LazyColumn(
                 state = listState,
-                modifier = Modifier.weight(1f).pointerInput(Unit) {
-                    var down = 0f
-                    detectVerticalDragGestures(
-                        onDragEnd = { if (down > 80f && draggedId == null) onBack(); down = 0f },
-                        onDragCancel = { down = 0f }
-                    ) { _, dy -> if (draggedId == null) down += dy }
-                },
+                modifier = Modifier.weight(1f).nestedScroll(pullToClose),
                 contentPadding = PaddingValues(start = 22.dp, end = 22.dp, bottom = 12.dp)
             ) {
                 // Show every queue slot — already-played rows are greyed out via [played]

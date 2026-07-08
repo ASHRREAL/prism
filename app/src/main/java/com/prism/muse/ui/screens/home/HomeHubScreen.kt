@@ -44,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -172,9 +173,21 @@ fun HomeHubScreen(
                         .graphicsLayer {
                             val off = (page - pagerState.currentPage) - pagerState.currentPageOffsetFraction
                             val t = off.coerceIn(0f, 1f)
-                            scaleX = 1f - 0.08f * t
-                            scaleY = 1f - 0.08f * t
-                            alpha = 1f - 0.4f * t
+                            if (depthEffect) {
+                                // Panorama recede: the peeking page to the right
+                                // rotates back into 3D (its far edge shrinks), the
+                                // same perspective as Now Playing's "up next" pane.
+                                transformOrigin = TransformOrigin(0f, 0.5f)
+                                cameraDistance = 16f * density
+                                rotationY = 32f * t
+                                scaleX = 1f - 0.18f * t
+                                scaleY = 1f - 0.18f * t
+                                alpha = 1f - 0.6f * t
+                            } else {
+                                scaleX = 1f - 0.08f * t
+                                scaleY = 1f - 0.08f * t
+                                alpha = 1f - 0.4f * t
+                            }
                         }
                 ) {
                     Text(

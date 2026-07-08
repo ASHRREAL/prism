@@ -32,9 +32,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.interaction.DragInteraction
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -135,12 +142,47 @@ fun LyricsScreen(
     }
 
     val listState = rememberLazyListState()
-    LaunchedEffect(activeIndex) {
-        // Keep the active line pinned ~1/3 from the top, and never fight the
-        // user's own scrolling.
-        if (activeIndex >= 0 && !listState.isScrollInProgress) {
+    // "Follow the song": auto-scroll keeps the active line ~1/3 from the top, but
+    // the moment the user scrolls the lyrics by hand we stop following so it never
+    // yanks them back. The "sync" link re-enables it and jumps to the current line.
+    var followActive by remember { mutableStateOf(true) }
+    // Re-follow whenever the song changes (single stable state so the long-lived
+    // interaction collector below never writes to a stale one).
+    LaunchedEffect(song?.id) { followActive = true }
+    LaunchedEffect(listState) {
+        listState.interactionSource.interactions.collect { interaction ->
+            if (interaction is DragInteraction.Start) followActive = false
+        }
+    }
+    LaunchedEffect(activeIndex, followActive) {
+        if (followActive && activeIndex >= 0 && !listState.isScrollInProgress) {
             val viewport = listState.layoutInfo.viewportSize.height
             listState.animateScrollToItem(activeIndex, scrollOffset = -viewport / 3)
+        }
+    }
+
+    // Pull-down-to-close when the lyrics are already scrolled to the very top:
+    // an unconsumed downward over-scroll accumulates and a release past the
+    // threshold returns to Now Playing — without fighting normal scrolling.
+    val onBackUpdated = rememberUpdatedState(onBack)
+    val pullToClose = remember(listState) {
+        object : NestedScrollConnection {
+            var pull = 0f
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (source == NestedScrollSource.UserInput && available.y > 0f &&
+                    listState.firstVisibleItemIndex == 0 &&
+                    listState.firstVisibleItemScrollOffset == 0
+                ) {
+                    pull += available.y
+                }
+                return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (pull > 180f) onBackUpdated.value()
+                pull = 0f
+                return Velocity.Zero
+            }
         }
     }
 
@@ -256,6 +298,7 @@ fun LyricsScreen(
                     }
                     else -> LazyColumn(
                         state = listState,
+                        modifier = Modifier.nestedScroll(pullToClose),
                         contentPadding = PaddingValues(horizontal = 28.dp, vertical = 32.dp),
                         verticalArrangement = Arrangement.spacedBy(22.dp)
                     ) {
@@ -353,7 +396,7 @@ fun LyricsScreen(
                 val styleOrder = listOf("karaoke", "fade", "spotlight", "pulse")
                 TextLinkRow(
                     links = listOf(
-                        if (lyrics?.synced == true) "synced" else "unsynced",
+                        if (lyrics?.synced == true) "sync" else "unsynced",
                         lyricsStyle,
                         "translate",
                         "search"
@@ -362,6 +405,8 @@ fun LyricsScreen(
                     accent = accent,
                     onClick = { link ->
                         when (link) {
+                            // Re-follow the song and jump back to the current line.
+                            "sync" -> { followActive = true }
                             lyricsStyle -> {
                                 val next = styleOrder[(styleOrder.indexOf(lyricsStyle) + 1) % styleOrder.size]
                                 graph.prefs.setLyricsStyle(next)

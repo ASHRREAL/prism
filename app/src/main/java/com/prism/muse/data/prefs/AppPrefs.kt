@@ -50,6 +50,18 @@ class AppPrefs(context: Context) {
     private val _autoFetchLyrics = MutableStateFlow(prefs.getBoolean("auto_fetch_lyrics", true))
     val autoFetchLyrics: StateFlow<Boolean> = _autoFetchLyrics
 
+    /** Which online lyric providers the multi-source fetch is allowed to use. */
+    private val _lyricsProviders = MutableStateFlow(
+        prefs.getStringSet("lyrics_providers", ALL_LYRIC_PROVIDERS.toSet())?.toSet()
+            ?: ALL_LYRIC_PROVIDERS.toSet()
+    )
+    val lyricsProviders: StateFlow<Set<String>> = _lyricsProviders
+
+    fun setLyricsProviders(value: Set<String>) {
+        prefs.edit().putStringSet("lyrics_providers", value).apply()
+        _lyricsProviders.value = value
+    }
+
     private val _eqEnabled = MutableStateFlow(prefs.getBoolean("eq_enabled", true))
     val eqEnabled: StateFlow<Boolean> = _eqEnabled
 
@@ -175,6 +187,9 @@ class AppPrefs(context: Context) {
             "recommended", "recently played", "albums", "artists",
             "playlists", "favorites", "downloaded", "genres", "all songs"
         )
+
+        /** Selectable lyric providers, in fetch-priority order (synced first). */
+        val ALL_LYRIC_PROVIDERS = listOf("lrclib", "netease", "subsonic", "genius", "lyrics.ovh")
     }
 
     fun setCustomEq(levels: List<Int>) {

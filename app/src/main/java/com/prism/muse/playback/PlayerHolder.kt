@@ -470,27 +470,30 @@ class PlayerHolder(
         if (!demoMode) player.addMediaItem(toMediaItem(song))
     }
 
-    /** Shuffle the upcoming tracks, keeping the current song playing. */
+    /**
+     * Shuffle only the *upcoming* tracks, leaving the current song (and anything
+     * already played) exactly where it is. Crucially this reorders the media items
+     * AFTER the current one via remove/add instead of setMediaItems — replacing the
+     * whole list forced ExoPlayer to re-load the current item, which is why the
+     * song briefly stopped when you tapped shuffle. The playing item is never
+     * touched, so playback continues seamlessly.
+     */
     fun shuffleQueue() {
         val s = _state.value
-        if (s.queue.size <= 2) return
         val curIdx = s.currentIndex
-        val current = s.current ?: return
-        val rest = s.queue.filterIndexed { i, _ -> i != curIdx }.shuffled()
-        val insertPos = curIdx.coerceIn(0, rest.size)
-        val newList = rest.toMutableList().apply { add(insertPos, current) }
-        // currentIndex points to the just-reinserted `current`, never the
-        // first matching id in case the same song sits twice in the queue.
-        val newCurIdx = insertPos
-        _state.update {
-            it.copy(queue = newList, currentIndex = newCurIdx, shuffle = true)
-        }
+        // Need at least two upcoming tracks to have something to shuffle.
+        if (s.queue.size - curIdx <= 2) return
+        val head = s.queue.take(curIdx + 1)        // played + current, untouched
+        val tail = s.queue.drop(curIdx + 1).shuffled()
+        val newList = head + tail
+        _state.update { it.copy(queue = newList, shuffle = true) }
         if (!demoMode) {
-            player.setMediaItems(newList.map(::toMediaItem), newCurIdx, (s.positionSec * 1000).toLong())
-            // Don't call prepare() — it interrupts playback
-            player.playWhenReady = s.isPlaying
+            // Swap out just the trailing items; the current one keeps playing.
             player.shuffleModeEnabled = false
+            player.removeMediaItems(curIdx + 1, player.mediaItemCount)
+            player.addMediaItems(tail.map(::toMediaItem))
         }
+        saveSession()
     }
 
     fun removeFromQueue(song: Song) {

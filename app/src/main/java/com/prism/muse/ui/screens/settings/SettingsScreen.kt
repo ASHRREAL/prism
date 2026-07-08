@@ -39,6 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.prism.muse.PrismApp
+import com.prism.muse.data.prefs.AppPrefs
 import com.prism.muse.ui.components.AriaBackground
 import com.prism.muse.ui.components.HairlineDivider
 import com.prism.muse.ui.theme.AccentColors
@@ -81,12 +82,14 @@ fun SettingsScreen(
     val syncing by library.syncing.collectAsState()
     val accentName by prefs.accentColorName.collectAsState()
     val autoFetchLyrics by prefs.autoFetchLyrics.collectAsState()
+    val lyricsProviders by prefs.lyricsProviders.collectAsState()
     val npBg by prefs.npBackground.collectAsState()
     val dynamicAccent by prefs.dynamicAccent.collectAsState()
     val eqEnabled by prefs.eqEnabled.collectAsState()
 
     var downloadsBytes by remember { mutableStateOf(library.downloadsSizeBytes()) }
     var picker by remember { mutableStateOf<PickerData?>(null) }
+    var lyricsSourcesOpen by remember { mutableStateOf(false) }
 
     val bgLabels = mapOf(
         "blurred" to "blurred art",
@@ -267,6 +270,15 @@ fun SettingsScreen(
                 accent = accent,
                 onClick = { prefs.setAutoFetchLyrics(!autoFetchLyrics) }
             )
+            if (autoFetchLyrics) {
+                SettingRow(
+                    "Lyrics sources",
+                    "${lyricsProviders.size} of ${AppPrefs.ALL_LYRIC_PROVIDERS.size} ›",
+                    accentValue = false,
+                    accent = accent,
+                    onClick = { lyricsSourcesOpen = true }
+                )
+            }
 
             GroupLabel("STORAGE")
             SettingRow(
@@ -409,6 +421,49 @@ fun SettingsScreen(
                                 .clickable { p.onPick(option); picker = null }
                                 .padding(vertical = 12.dp)
                         )
+                    }
+                }
+            }
+        }
+        // Lyrics-sources multi-select sheet: tap each provider to toggle it.
+        if (lyricsSourcesOpen) {
+            val providerLabels = mapOf(
+                "lrclib" to "LRCLIB · synced",
+                "netease" to "Netease · synced",
+                "subsonic" to "Subsonic / server",
+                "genius" to "Genius · text",
+                "lyrics.ovh" to "lyrics.ovh · text"
+            )
+            Box(
+                Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f))
+                    .pointerInput(Unit) { detectTapGestures { lyricsSourcesOpen = false } }
+            )
+            Column(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(VoidBlack)
+                    .pointerInput(Unit) { detectTapGestures { /* consume */ } }
+                    .navigationBarsPadding()
+                    .padding(horizontal = 24.dp, vertical = 18.dp)
+            ) {
+                Text("LYRICS SOURCES · TAP TO TOGGLE", style = TrackedLabel, color = TextTertiary)
+                HairlineDivider(Modifier.padding(top = 10.dp, bottom = 4.dp))
+                AppPrefs.ALL_LYRIC_PROVIDERS.forEach { id ->
+                    val on = id in lyricsProviders
+                    Row(
+                        Modifier.fillMaxWidth().clickable {
+                            val next = if (on) lyricsProviders - id else lyricsProviders + id
+                            prefs.setLyricsProviders(next)
+                        }.padding(vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            providerLabels[id] ?: id,
+                            style = SectionHeader.copy(fontSize = 20.sp),
+                            color = if (on) TextPrimary else TextTertiary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(if (on) "on" else "off",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (on) accent else TextTertiary)
                     }
                 }
             }

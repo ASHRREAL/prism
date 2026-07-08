@@ -38,17 +38,20 @@ class LyricsRepository(private val api: SubsonicClient, private val prefs: AppPr
                 // in priority order — synced sources first — and cancel the
                 // stragglers as soon as something usable arrives.
                 coroutineScope {
-                    val providers = listOf(
-                        async { runCatching { lrclibLyrics(song) }.getOrNull() },
-                        async { runCatching { lrclibSearch(song) }.getOrNull() },
-                        async { runCatching { neteaseLyrics(song) }.getOrNull() },
-                        async { runCatching { api.getLyrics(song) }.getOrNull() },
-                        // Genius has by far the widest catalogue (niche / electronic
-                        // tracks that lrclib & netease miss) — text-only, so it ranks
-                        // below the synced sources but above the last-ditch ones.
-                        async { runCatching { geniusLyrics(song) }.getOrNull() },
-                        async { runCatching { lyricsOvhLyrics(song) }.getOrNull() }
-                    )
+                    // Only the providers the user enabled in settings, kept in
+                    // priority order (synced sources first, text-only last). Genius
+                    // has by far the widest catalogue for niche/electronic tracks.
+                    val enabled = prefs.lyricsProviders.value
+                    val providers = buildList {
+                        if ("lrclib" in enabled) {
+                            add(async { runCatching { lrclibLyrics(song) }.getOrNull() })
+                            add(async { runCatching { lrclibSearch(song) }.getOrNull() })
+                        }
+                        if ("netease" in enabled) add(async { runCatching { neteaseLyrics(song) }.getOrNull() })
+                        if ("subsonic" in enabled) add(async { runCatching { api.getLyrics(song) }.getOrNull() })
+                        if ("genius" in enabled) add(async { runCatching { geniusLyrics(song) }.getOrNull() })
+                        if ("lyrics.ovh" in enabled) add(async { runCatching { lyricsOvhLyrics(song) }.getOrNull() })
+                    }
                     var best: Lyrics? = null
                     for (p in providers) {
                         best = p.await()
