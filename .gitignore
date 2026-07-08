@@ -45,3 +45,7 @@ Thumbs.db
 
 # Claude Code
 .claude/
+
+# Signing
+keystore/
+keystore.properties
