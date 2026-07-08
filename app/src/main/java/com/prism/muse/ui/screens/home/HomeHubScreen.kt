@@ -237,7 +237,7 @@ private fun AlbumsPanel(albums: List<Album>, onAlbumClick: (Album) -> Unit, bott
     ) {
         itemsIndexed(albums, key = { _, a -> a.id }) { _, album ->
             Column(Modifier.clickable { onAlbumClick(album) }) {
-                Artwork(seed = album.artUrl, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
+                Artwork(seed = album.artUrl, label = album.title, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
                 Text(album.title, style = MaterialTheme.typography.titleMedium, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp))
                 Text(album.artist, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }

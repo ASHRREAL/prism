@@ -127,7 +127,7 @@ fun SongRow(
                 .padding(vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Artwork(seed = song.artUrl, modifier = Modifier.size(56.dp))
+            Artwork(seed = song.artUrl, label = song.title, modifier = Modifier.size(56.dp))
             Column(Modifier.padding(start = 16.dp).weight(1f)) {
                 Text(
                     song.title,

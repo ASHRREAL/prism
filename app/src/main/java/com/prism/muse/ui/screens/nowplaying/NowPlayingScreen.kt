@@ -242,7 +242,7 @@ fun NowPlayingScreen(
                                     .then(if (depthEffect) Modifier.gyroTilt(maxDegrees = 7f) else Modifier)
                                     .shadow(30.dp, RectangleShape, ambientColor = Color.Black, spotColor = Color.Black)
                             ) {
-                                Artwork(seed = song.artUrl, modifier = Modifier.fillMaxSize())
+                                Artwork(seed = song.artUrl, label = song.title, modifier = Modifier.fillMaxSize())
                             }
                         }
 
@@ -370,7 +370,7 @@ private fun UpNextRow(song: Song) {
         Modifier.fillMaxWidth().padding(vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Artwork(seed = song.artUrl, modifier = Modifier.size(40.dp))
+        Artwork(seed = song.artUrl, label = song.title, modifier = Modifier.size(40.dp))
         Column(Modifier.padding(start = 12.dp)) {
             Text(
                 song.title,

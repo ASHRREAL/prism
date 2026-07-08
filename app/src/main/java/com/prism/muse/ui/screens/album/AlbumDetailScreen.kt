@@ -89,6 +89,7 @@ fun AlbumDetailScreen(
                     ) {
                         Artwork(
                             seed = album.artUrl,
+                            label = album.title,
                             modifier = Modifier.size(150.dp).gyroTilt(maxDegrees = 5f)
                         )
                         Column(Modifier.padding(start = 18.dp).weight(1f)) {

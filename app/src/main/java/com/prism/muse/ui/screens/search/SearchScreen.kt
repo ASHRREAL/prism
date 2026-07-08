@@ -140,7 +140,7 @@ fun SearchScreen(
                                     Modifier.fillMaxWidth().clickable { onAlbumClick(album) }.padding(vertical = 12.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Artwork(seed = album.artUrl, modifier = Modifier.size(56.dp))
+                                    Artwork(seed = album.artUrl, label = album.title, modifier = Modifier.size(56.dp))
                                     Column(Modifier.padding(start = 16.dp)) {
                                         Text(album.title, style = MaterialTheme.typography.titleMedium, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         Text(album.artist, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)

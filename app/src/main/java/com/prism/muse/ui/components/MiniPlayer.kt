@@ -93,7 +93,7 @@ fun MiniPlayer(
                 .clickable(onClick = onExpand),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Artwork(seed = song.artUrl, modifier = Modifier.size(44.dp).aspectRatio(1f))
+            Artwork(seed = song.artUrl, label = song.title, modifier = Modifier.size(44.dp).aspectRatio(1f))
             androidx.compose.foundation.layout.Column(
                 Modifier.weight(1f).padding(horizontal = 12.dp)
             ) {

@@ -279,7 +279,7 @@ private fun QueueRow(
             Box(Modifier.width(16.dp), contentAlignment = Alignment.Center) {
                 if (isCurrent) Text("▶", color = accent, fontSize = 12.sp)
             }
-            Artwork(seed = song.artUrl, modifier = Modifier.padding(start = 4.dp).size(48.dp))
+            Artwork(seed = song.artUrl, label = song.title, modifier = Modifier.padding(start = 4.dp).size(48.dp))
             Column(Modifier.weight(1f).padding(start = 14.dp)) {
                 Text(song.title, style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp),
                     color = titleColor, maxLines = 1, overflow = TextOverflow.Ellipsis)

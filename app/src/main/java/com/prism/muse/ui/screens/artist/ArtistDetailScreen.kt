@@ -112,7 +112,7 @@ fun ArtistDetailScreen(
                     ) {
                         items(albums, key = { it.id }) { album ->
                             Column(Modifier.width(140.dp).clickable { onAlbumClick(album) }) {
-                                Artwork(seed = album.artUrl, modifier = Modifier.aspectRatio(1f))
+                                Artwork(seed = album.artUrl, label = album.title, modifier = Modifier.aspectRatio(1f))
                                 Text(
                                     album.title,
                                     style = MaterialTheme.typography.titleMedium,

@@ -183,7 +183,33 @@ fun VisualizerScreen(
                 val h = size.height
                 if (w <= 0f || h <= 0f) return@Canvas
                 val centerY = h / 2
-                val barWidth = w / barCount
+
+                // Symmetric spectrum: bass sits at the centre and treble radiates
+                // out to BOTH edges (mirrored left/right), each bar mirrored above
+                // and below the mid-line. Fills the whole canvas instead of a
+                // single one-sided band climbing off one edge.
+                fun drawMirroredBars(
+                    level: (Int) -> Float,
+                    upAlpha: Float,
+                    downAlpha: Float,
+                    heightFactor: Float,
+                    minBar: Float
+                ) {
+                    val half = w / 2f
+                    val slot = half / barCount
+                    val stroke = slot * 0.55f
+                    for (i in 0 until barCount) {
+                        val v = level(i).coerceIn(0f, 1f)
+                        val barH = (v * h * heightFactor).coerceAtLeast(minBar)
+                        val off = (i + 0.5f) * slot
+                        for (x in floatArrayOf(half - off, half + off)) {
+                            drawLine(accent.copy(alpha = upAlpha), Offset(x, centerY),
+                                Offset(x, centerY - barH), stroke, StrokeCap.Round)
+                            drawLine(accent.copy(alpha = downAlpha), Offset(x, centerY),
+                                Offset(x, centerY + barH), stroke, StrokeCap.Round)
+                        }
+                    }
+                }
 
                 // Animated Lissajous (a=1, b=2 → figure-8 / "infinity"). Layered as
                 // four time-offset echo trails each deformed by a different bin
@@ -326,15 +352,9 @@ fun VisualizerScreen(
                             drawInfinity(levels, mainAlpha = 1f, glowAlpha = 1f, phase = t, radialBoost = 0.55f)
                         }
                         else -> {
-                            val minBar = 3f
-                            for (i in 0 until barCount) {
-                                val barH = (levels[i] * h * 0.62f).coerceAtLeast(minBar)
-                                val x = i * barWidth + barWidth / 2
-                                drawLine(accent.copy(alpha = 0.75f), Offset(x, centerY), Offset(x, centerY - barH),
-                                    barWidth * 0.5f, StrokeCap.Round)
-                                drawLine(accent.copy(alpha = 0.25f), Offset(x, centerY), Offset(x, centerY + barH * 0.6f),
-                                    barWidth * 0.5f, StrokeCap.Round)
-                            }
+                            drawLine(accent.copy(alpha = 0.12f), Offset(0f, centerY), Offset(w, centerY), 1f)
+                            drawMirroredBars({ levels[it] }, upAlpha = 0.8f, downAlpha = 0.5f,
+                                heightFactor = 0.48f, minBar = 3f)
                         }
                     }
                 } else if (state.isPlaying) {
@@ -353,14 +373,10 @@ fun VisualizerScreen(
                         drawInfinity(synth, mainAlpha = 0.85f, glowAlpha = 0.6f, phase = tick / 90f, radialBoost = 0.4f)
                     } else {
                         val t = tick / 60f
-                        for (i in 0 until barCount) {
-                            val nh = (0.35f + 0.65f * abs(sin(i * 0.22f + t * 0.9f) * cos(i * 0.16f + t * 1.3f))) * h * 0.55f
-                            val x = i * barWidth + barWidth / 2
-                            drawLine(accent.copy(alpha = 0.5f), Offset(x, centerY), Offset(x, centerY - nh),
-                                barWidth * 0.5f, StrokeCap.Round)
-                            drawLine(accent.copy(alpha = 0.2f), Offset(x, centerY), Offset(x, centerY + nh * 0.6f),
-                                barWidth * 0.5f, StrokeCap.Round)
-                        }
+                        drawMirroredBars(
+                            { i -> 0.35f + 0.55f * abs(sin(i * 0.22f + t * 0.9f) * cos(i * 0.16f + t * 1.3f)) },
+                            upAlpha = 0.5f, downAlpha = 0.32f, heightFactor = 0.46f, minBar = 2f
+                        )
                         drawCircle(accent.copy(alpha = 0.4f), 6f, Offset(w / 2, centerY))
                     }
                 } else {
@@ -373,14 +389,11 @@ fun VisualizerScreen(
                         }
                         drawInfinity(synth, mainAlpha = 0.4f, glowAlpha = 0.25f, phase = tick / 110f, radialBoost = 0.25f)
                     } else {
-                        for (i in 0 until barCount) {
-                            val nh = (0.1f + 0.15f * abs(sin(i * 0.3f))) * h * 0.3f
-                            val x = i * barWidth + barWidth / 2
-                            drawLine(accent.copy(alpha = 0.2f), Offset(x, centerY), Offset(x, centerY - nh),
-                                barWidth * 0.4f, StrokeCap.Round)
-                            drawLine(accent.copy(alpha = 0.1f), Offset(x, centerY), Offset(x, centerY + nh),
-                                barWidth * 0.4f, StrokeCap.Round)
-                        }
+                        val t = tick / 60f
+                        drawMirroredBars(
+                            { i -> 0.1f + 0.16f * abs(sin(i * 0.3f + t * 0.4f)) },
+                            upAlpha = 0.2f, downAlpha = 0.12f, heightFactor = 0.4f, minBar = 1.5f
+                        )
                         drawCircle(accent.copy(alpha = 0.15f), 4f, Offset(w / 2, centerY))
                     }
                 }

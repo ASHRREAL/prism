@@ -33,6 +33,7 @@ fun AlbumCard(album: Album, onClick: () -> Unit, modifier: Modifier = Modifier) 
     Column(modifier = modifier.width(140.dp).clickable(onClick = onClick)) {
         Artwork(
             seed = album.artUrl,
+            label = album.title,
             overrideColor = com.prism.muse.ui.theme.colorFromHex(album.dominantColorHex),
             modifier = Modifier.aspectRatio(1f)
         )
@@ -51,7 +52,7 @@ fun AlbumCard(album: Album, onClick: () -> Unit, modifier: Modifier = Modifier) 
 @Composable
 fun ArtistTile(artist: Artist, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Column(modifier = modifier.width(108.dp).clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
-        Artwork(seed = artist.imageUrl, modifier = Modifier.size(96.dp))
+        Artwork(seed = artist.imageUrl, label = artist.name, modifier = Modifier.size(96.dp))
         Text(
             artist.name,
             style = MaterialTheme.typography.bodyMedium,
@@ -86,7 +87,7 @@ fun PlaylistCard(playlist: Playlist, onClick: () -> Unit, modifier: Modifier = M
 fun SongCard(song: Song, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Column(modifier = modifier.width(140.dp).clickable(onClick = onClick)) {
         Box(Modifier.aspectRatio(1f)) {
-            Artwork(seed = song.artUrl, modifier = Modifier.aspectRatio(1f))
+            Artwork(seed = song.artUrl, label = song.title, modifier = Modifier.aspectRatio(1f))
             if (song.isFavorite) {
                 Icon(
                     Icons.Rounded.Favorite,
