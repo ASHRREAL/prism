@@ -1,6 +1,6 @@
-# Prism Muse
+# Prism
 
-A Navidrome / Subsonic music player for Android, built with Jetpack Compose.
+An Android music player for Navidrome / Subsonic, built with Jetpack Compose.
 
 <p align="center">
   <img src="screenshots/04_home.jpg" width="22%" alt="Home">
@@ -38,4 +38,4 @@ A Navidrome / Subsonic music player for Android, built with Jetpack Compose.
 
 ## License
 
-MIT
+[MIT](LICENSE.md)
