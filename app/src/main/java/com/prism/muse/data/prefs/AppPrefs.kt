@@ -26,16 +26,6 @@ class AppPrefs(context: Context) {
     private val _server = MutableStateFlow(readServer())
     val server: StateFlow<ServerConfig> = _server
 
-    /** Server flavour the connection speaks to: "navidrome" or "subsonic" (both
-     *  use the Subsonic API; this records which the user is pointing at). */
-    private val _serverType = MutableStateFlow(prefs.getString("server_type", "navidrome") ?: "navidrome")
-    val serverType: StateFlow<String> = _serverType
-
-    fun setServerType(value: String) {
-        prefs.edit().putString("server_type", value).apply()
-        _serverType.value = value
-    }
-
     private val _offlineMode = MutableStateFlow(prefs.getBoolean("offline_mode", false))
     val offlineMode: StateFlow<Boolean> = _offlineMode
 

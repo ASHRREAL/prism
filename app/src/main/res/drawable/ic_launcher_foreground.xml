@@ -1,38 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- play mark: a play triangle foreshortened like the app's panorama tilt, given
-     depth by an extruded side face, a light top edge and a very faint shadow. -->
+<!-- "Navidrome Logo" handoff: a tilted, faceted play mark with a dispersing light
+     trail. Two coplanar facets (light top / dark bottom) split at the mid-line give
+     the crease; vertices are the design's play triangle projected through
+     perspective(500) rotateY(-16) rotateX(4). Facet/ray colours are the design's
+     oklch values converted to sRGB. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- horizontal foreshortening (scaleX) fakes the panorama rotateY tilt -->
-    <group
-        android:pivotX="54"
-        android:pivotY="54"
-        android:scaleX="0.94">
+    <!-- drop shadow (drop-shadow(6px 10px 9px rgba(0,0,0,.55)), no blur) -->
+    <path
+        android:pathData="M36.8,37.3 L81.4,59.5 L36.5,83.8 Z"
+        android:fillColor="#46000000" />
 
-        <!-- very subtle cast shadow (barely there on the dark background) -->
-        <path
-            android:pathData="M47,39 L50,85 L86,62 Z"
-            android:fillColor="#40000000" />
+    <!-- dispersing light trail off the tip -->
+    <path android:pathData="M81,51.8 L123,46.1 L123,61.9 L81,56.2 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="81" android:startY="54"
+                android:endX="123" android:endY="54">
+                <item android:offset="0.0" android:color="#992BBDF5" />
+                <item android:offset="1.0" android:color="#002BBDF5" />
+            </gradient>
+        </aapt:attr>
+    </path>
 
-        <!-- extruded side face — the play button's thickness -->
-        <path
-            android:pathData="M44,35 L47,81 L83,58 Z"
-            android:fillColor="#17567F" />
+    <!-- top facet (lighter) -->
+    <path
+        android:pathData="M32.75,31.33 L77.35,53.53 L32.64,54.43 Z"
+        android:fillColor="#57EBFF" />
 
-        <!-- front face -->
-        <path
-            android:pathData="M40,30 L43,76 L79,53 Z"
-            android:fillColor="#3FB0F2" />
-
-        <!-- top edge highlight -->
-        <path
-            android:pathData="M40,30 L79,53"
-            android:strokeColor="#BCE9FF"
-            android:strokeWidth="2"
-            android:strokeLineCap="round" />
-    </group>
+    <!-- bottom facet (darker) -->
+    <path
+        android:pathData="M32.64,54.43 L77.35,53.53 L32.53,77.78 Z"
+        android:fillColor="#007EBB" />
 </vector>

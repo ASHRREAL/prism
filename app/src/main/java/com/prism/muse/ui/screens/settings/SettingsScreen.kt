@@ -73,7 +73,6 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
 
     val server by prefs.server.collectAsState()
-    val serverType by prefs.serverType.collectAsState()
     val offline by prefs.offlineMode.collectAsState()
     // A song in the mini player overlaps the bottom of the picker sheets — reserve
     // room so the last option isn't hidden behind it.
@@ -139,19 +138,6 @@ fun SettingsScreen(
                 accentValue = server.isConfigured,
                 accent = accent,
                 onClick = onOpenAccounts
-            )
-            SettingRow(
-                "Server type",
-                "${serverType.replaceFirstChar { it.uppercase() }} ›",
-                accentValue = false,
-                accent = accent,
-                onClick = {
-                    picker = PickerData(
-                        title = "server type",
-                        options = listOf("Navidrome", "Subsonic"),
-                        selected = serverType.replaceFirstChar { it.uppercase() }
-                    ) { sel -> prefs.setServerType(sel.lowercase()) }
-                }
             )
             SettingRow(
                 "Offline mode",

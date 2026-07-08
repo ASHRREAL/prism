@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- icon backdrop: radial-gradient(120% 120% at 30% 15%, #1b1c20, #030304 72%)
+     from the Navidrome Logo handoff — a soft light in the top-left of near-black. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:pathData="M0,0 L108,0 L108,108 L0,108 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="32.4"
+                android:centerY="16.2"
+                android:gradientRadius="130">
+                <item android:offset="0.0" android:color="#FF1B1C20" />
+                <item android:offset="0.72" android:color="#FF030304" />
+                <item android:offset="1.0" android:color="#FF030304" />
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>
