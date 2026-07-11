@@ -50,10 +50,8 @@ import com.prism.muse.ui.theme.VoidBlack
 import kotlinx.coroutines.launch
 
 /**
- * App-wide "song actions" controller. Any screen calls [SongActions.open]; the
- * single [SongActionsHost] at the app root renders the sheet. Using shared
- * snapshot state avoids threading callbacks through every list, and rendering at
- * the root (instead of a per-row DropdownMenu popup) is far more robust.
+ * App-wide "song actions" controller. Any screen calls [SongActions.open];
+ * the single [SongActionsHost] at the app root renders the sheet.
  */
 object SongActions {
     var song by mutableStateOf<Song?>(null)

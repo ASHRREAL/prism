@@ -20,13 +20,7 @@ import com.prism.muse.ui.theme.GlassStroke
 import com.prism.muse.ui.theme.GlassWhite04
 import com.prism.muse.ui.theme.GlassWhite08
 
-/**
- * Frosted acrylic panel: soft gradient fill + hairline border + drop shadow.
- * True backdrop blur (sampling what's behind the panel) needs RenderNode/Haze-style
- * plumbing; this approximates the frosted look cheaply so it stays smooth on
- * low-end devices too. [blurRadius] additionally blurs the panel's own content
- * (useful for background art the panel sits on top of, not for what's below it).
- */
+/** Frosted acrylic panel: gradient fill + hairline border + drop shadow. */
 @Composable
 fun GlassSurface(
     modifier: Modifier = Modifier,

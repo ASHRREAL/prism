@@ -11,10 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 
-/**
- * Hand-wired object graph — deliberately no Hilt so the build needs no
- * annotation processors; everything hangs off the Application.
- */
+/** Hand-wired object graph — no DI framework. */
 class AppGraph(app: Application) {
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val prefs = AppPrefs(app)

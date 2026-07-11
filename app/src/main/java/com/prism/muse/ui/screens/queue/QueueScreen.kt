@@ -89,10 +89,7 @@ fun QueueScreen(viewModel: PlaybackViewModel, onBack: () -> Unit) {
         val q = state.queue.toList()
         mutableStateListOf<Song>().also { it.addAll(q) }
     }
-    // Stable key per queue slot (independent of position) so the LazyColumn
-    // composable follows the row through reorderings instead of being disposed
-    // — disposing mid-drag cancels the gesture coroutine, which is why a row
-    // "got stuck" after one swap.
+    // Stable keys keep rows alive through reorderings — disposing mid-drag cancels the gesture.
     val queueKeys = remember(state.queue) {
         var n = 0
         mutableStateListOf<Int>().also { list -> repeat(state.queue.size) { list.add(n++) } }
@@ -104,18 +101,14 @@ fun QueueScreen(viewModel: PlaybackViewModel, onBack: () -> Unit) {
     var dragAccumY by remember { mutableFloatStateOf(0f) }
     val rowHeightPx = with(density) { 72.dp.toPx() }
 
-    // The list now shows the whole queue (no `drop(currentIndex)` shortcut), so
-    // jump straight to the playing row on first show.
+    // Jump to the playing row when the queue first appears.
     androidx.compose.runtime.LaunchedEffect(safeCurrentIndex, queueList.size) {
         if (!listState.isScrollInProgress && queueList.isNotEmpty()) {
             runCatching { listState.scrollToItem(safeCurrentIndex) }
         }
     }
 
-    // Pull-down-to-close: only when the list is already scrolled to the very top,
-    // a downward over-scroll that isn't consumed by the list accumulates, and a
-    // release past the threshold drops back to Now Playing. Uses nested scroll so
-    // it never fights the list's own scrolling mid-list.
+    // Pull from very top to close — only when list is at scroll origin.
     val onBackUpdated = rememberUpdatedState(onBack)
     val pullToClose = remember(listState) {
         object : NestedScrollConnection {
@@ -177,17 +170,11 @@ fun QueueScreen(viewModel: PlaybackViewModel, onBack: () -> Unit) {
                 modifier = Modifier.weight(1f).nestedScroll(pullToClose),
                 contentPadding = PaddingValues(start = 22.dp, end = 22.dp, bottom = 12.dp)
             ) {
-                // Show every queue slot — already-played rows are greyed out via [played]
-// instead of being dropped. Dropping by currentIndex (the old behavior) hid
-// arbitrary subsets under shuffle because ExoPlayer's media-item index jumps
-// along its opaque shuffle order, not sequentially.
-itemsIndexed(queueList, key = { i, _ -> queueKeys[i] }) { realIdx, song ->
+                // Show every slot — already-played rows dimmed instead of dropped.
+                itemsIndexed(queueList, key = { i, _ -> queueKeys[i] }) { realIdx, song ->
                     val isCurrent = realIdx == safeCurrentIndex
                     val isDragging = queueKeys[realIdx] == draggedSlotKey && !isCurrent
-                    // Positional "previous" — songs earlier in queue than the
-                    // one now playing read as already-heard. No history tracking;
-                    // this stays intuitive under shuffle (the queue UI keeps its
-                    // slot order, pre-current = before now-playing).
+                    // Earlier in queue = already-heard; no actual history tracking.
                     val played = realIdx < safeCurrentIndex
 
                     if (isCurrent) {
@@ -226,11 +213,7 @@ itemsIndexed(queueList, key = { i, _ -> queueKeys[i] }) { realIdx, song ->
                                     },
                                     onDrag = { dy ->
                                         dragAccumY += dy
-                                        // The pointer-input gesture scope captures this lambda
-                                        // once, so realIdx / queueKeys[realIdx] would be stale
-                                        // after a swap. Re-resolve the dragged slot's position
-                                        // by its stable key every event — survives reorderings
-                                        // and is unique even with duplicate songs.
+                                        // Re-resolve by stable key — gesture lambda captures stale slot index.
                                         val i = queueKeys.indexOf(draggedSlotKey)
                                         if (i in queueList.indices && i != safeCurrentIndex) {
                                             if (kotlin.math.abs(dragAccumY) > rowHeightPx * 0.5f) {

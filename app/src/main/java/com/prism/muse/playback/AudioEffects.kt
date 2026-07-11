@@ -9,14 +9,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
- * App-scoped owner of the audio DSP chain (EQ, bass, virtualizer, loudness),
- * bound once to the player's stable audio session. Living for the whole process
- * — instead of being created and destroyed by the EQ screen — is what makes the
- * equalizer keep applying during playback whether or not the screen is open, and
- * is what stopped band edits from "resetting": the old screen re-created its
- * Equalizer whenever the audio session id flickered, wiping every slider.
- *
- * All AudioEffect calls can throw on flaky vendor HALs, so every one is guarded.
+ * App-scoped DSP chain (EQ, bass, virtualizer, loudness), bound to the
+ * player's stable audio session. Lives for the whole process so the EQ
+ * keeps applying during playback regardless of screen visibility.
  */
 class AudioEffects(private val prefs: AppPrefs) {
 

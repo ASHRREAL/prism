@@ -95,16 +95,11 @@ fun SongListDetailScreen(
                 }
             } else {
                 LazyColumn(
-                    // Inset the rows to the same left/right margin as the title,
-                    // action row and divider above (they use 20.dp) — the rows
-                    // used to sit flush against the screen edge.
                     contentPadding = PaddingValues(start = 20.dp, top = 4.dp, end = 20.dp, bottom = 80.dp),
                     modifier = Modifier.weight(1f)
                         .then(if (depthEffect) Modifier.gyroTilt(maxDegrees = 4f) else Modifier)
                 ) {
-                    // Playlists may contain the same song more than once; a plain
-                    // id key would crash on the duplicate. Play by index so the
-                    // tapped row (not the first duplicate) starts.
+                    // Position-qualified key — playlists can have duplicate songs.
                     itemsIndexed(songs, key = { i, s -> "$i:${s.id}" }) { index, song ->
                         SongRowWithMenu(song = song, viewModel = viewModel,
                             onClick = { viewModel.playQueue(songs, index) }, accent = accent)

@@ -45,10 +45,7 @@ import com.prism.muse.ui.theme.TextSecondary
 import com.prism.muse.ui.theme.TextTertiary
 import kotlinx.coroutines.delay
 
-/**
- * Universal search (songs / albums / artists) over Subsonic search3 with
- * debounced instant results; demo library when no server is connected.
- */
+/** Universal search over Subsonic search3, with debounced instant results. */
 @Composable
 fun SearchScreen(
     onBack: () -> Unit,

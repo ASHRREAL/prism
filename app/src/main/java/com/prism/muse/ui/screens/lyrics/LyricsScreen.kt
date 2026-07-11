@@ -102,10 +102,8 @@ fun LyricsScreen(
         loading = false
     }
 
-    // A 60fps playback clock: the player position only ticks ~10x/sec, which
-    // made the highlight step and jitter. This advances with frame time while
-    // playing, drift-corrects gently toward the real position, and snaps on
-    // seeks — one smooth source of truth for the active line AND the sweep.
+    // 60fps smoothed clock — player position only ticks ~10x/sec and
+    // would make the highlight step and jitter otherwise.
     var smoothPosMs by remember { mutableStateOf((state.positionSec * 1000).toLong()) }
     LaunchedEffect(Unit) {
         var lastNanos = 0L
@@ -142,9 +140,8 @@ fun LyricsScreen(
     }
 
     val listState = rememberLazyListState()
-    // "Follow the song": auto-scroll keeps the active line ~1/3 from the top, but
-    // the moment the user scrolls the lyrics by hand we stop following so it never
-    // yanks them back. The "sync" link re-enables it and jumps to the current line.
+    // Auto-scroll follows the active line ~1/3 from the top.
+    // Stops following when the user scrolls by hand; "sync" re-enables it.
     var followActive by remember { mutableStateOf(true) }
     // Re-follow whenever the song changes (single stable state so the long-lived
     // interaction collector below never writes to a stale one).
@@ -161,9 +158,7 @@ fun LyricsScreen(
         }
     }
 
-    // Pull-down-to-close when the lyrics are already scrolled to the very top:
-    // an unconsumed downward over-scroll accumulates and a release past the
-    // threshold returns to Now Playing — without fighting normal scrolling.
+    // Pull from very top to close — only fires when list is at scroll origin.
     val onBackUpdated = rememberUpdatedState(onBack)
     val pullToClose = remember(listState) {
         object : NestedScrollConnection {
@@ -304,14 +299,10 @@ fun LyricsScreen(
                     ) {
                         itemsIndexed(current.lines, key = { i, _ -> i }) { index, line ->
                             val active = index == activeIndex
-                            // Distance from the active line drives the spotlight
-                            // dimming; smoothed so scrolling isn't steppy.
+                            // Smoothed so scrolling isn't steppy.
                             val distance = if (activeIndex < 0) 0 else kotlin.math.abs(index - activeIndex)
 
-                            // Fixed font size + graphicsLayer scale: animating the
-                            // font size re-laid-out the whole list every frame,
-                            // which both jittered the auto-scroll and let recycled
-                            // rows flash as a second "highlighted" line.
+                            // Scale via graphicsLayer instead of font size to avoid relaying-out every frame.
                             val targetScale = when {
                                 !active -> 1f
                                 lyricsStyle == "spotlight" -> 1.16f
@@ -347,22 +338,16 @@ fun LyricsScreen(
                                     viewModel.seekTo(line.timeMs / 1000f)
                                 }
 
-                            // Karaoke sweep only in the karaoke style; the other
-                            // styles use a solid highlight + scale/fade motion.
+                            // Karaoke sweep: time-driven horizontal gradient fill.
                             if (active && current.synced && lyricsStyle == "karaoke") {
                                 val startT = line.timeMs
                                 val end = current.lines.getOrNull(index + 1)?.timeMs ?: (startT + 3000L)
-                                // Purely time-driven off the 60fps playback clock
-                                // (never the audio): the fill glides across the line
-                                // over its own duration.
+                                // Fill fraction over line duration.
                                 val a = if (end > startT)
                                     ((smoothPosMs - startT).toFloat() / (end - startT)).coerceIn(0f, 1f)
                                 else 1f
                                 val dim = TextSecondary.copy(alpha = 0.4f)
-                                // A soft-edged horizontal sweep: a narrow blend band
-                                // rides just ahead of the fill so the highlight
-                                // glides continuously instead of snapping word to
-                                // word — smooth, and only this one line is ever lit.
+                                // Narrow blend band rides ahead of the fill for a smooth glide.
                                 val edge = (a + 0.06f).coerceAtMost(1f)
                                 val brush = Brush.horizontalGradient(
                                     colorStops = arrayOf(

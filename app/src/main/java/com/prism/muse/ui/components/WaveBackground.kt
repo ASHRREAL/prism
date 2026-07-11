@@ -22,13 +22,8 @@ import kotlin.math.PI
 import kotlin.math.sin
 
 /**
- * Slow-moving layered waves + radial glow behind an accent color, echoing the
- * floating-glass Windows Phone hub reference: deep base, soft top-light,
- * three translucent wave layers drifting at different speeds/depths.
- *
- * [drift] pans the bloom and wave phases sideways — feed it the panorama scroll
- * position so the background moves slower than the content, the deepest layer
- * of the WP-style parallax stack.
+ * Slow-moving layered waves + radial glow. Three translucent wave layers
+ * drifting at different speeds. [drift] pans the whole bloom sideways.
  */
 @Composable
 fun WaveBackground(

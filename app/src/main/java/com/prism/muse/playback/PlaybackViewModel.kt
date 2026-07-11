@@ -8,10 +8,7 @@ import com.prism.muse.data.model.Song
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-/**
- * Thin adapter between the screens and the app-wide [PlayerHolder] engine —
- * playback state survives the ViewModel because it lives in the holder.
- */
+/** Thin adapter between screens and the PlayerHolder. State lives in the holder. */
 class PlaybackViewModel(app: Application) : AndroidViewModel(app) {
 
     private val graph = PrismApp.graph(app)

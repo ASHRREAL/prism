@@ -20,11 +20,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 
-/**
- * aria/WP transport button: a bare white glyph on transparent ground.
- * [filled] renders the classic app-bar ring — a thin circle outline around
- * the glyph — used for the primary play/pause action.
- */
+/** Transport button: white glyph on transparent ground. [filled] draws a ring outline. */
 @Composable
 fun FloatingIcon(
     icon: ImageVector,

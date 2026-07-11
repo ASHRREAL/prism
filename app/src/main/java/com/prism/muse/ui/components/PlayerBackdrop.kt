@@ -16,11 +16,7 @@ import coil.compose.AsyncImage
 import com.prism.muse.ui.theme.InkNavy
 import com.prism.muse.ui.theme.VoidBlack
 
-/**
- * The shared "player" background used across Now Playing, Lyrics, Queue and EQ:
- * the current cover art blown up and blurred, or a soft colour wash when there's
- * no remote art, under a darkening top-to-bottom gradient.
- */
+/** Blurred cover-art backdrop with a dark top-to-bottom gradient. Used across player screens. */
 @Composable
 fun PlayerBackdrop(artUrl: String?, content: @Composable () -> Unit) {
     Box(Modifier.fillMaxSize().background(VoidBlack)) {

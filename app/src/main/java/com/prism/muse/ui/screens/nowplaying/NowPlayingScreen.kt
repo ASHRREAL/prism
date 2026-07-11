@@ -77,13 +77,7 @@ import com.prism.muse.ui.theme.TextTertiary
 import com.prism.muse.ui.theme.TrackedLabel
 import com.prism.muse.ui.theme.VoidBlack
 
-/**
- * Now Playing — a two-pane Metro panorama exactly like the design source: the
- * current pane (hero art + progress + transport + lyrics/equalizer links) sits
- * flat and full; the "up next" pane peeks at the right edge, receded in 3D
- * (perspective 900px, rotateY 32°, scale 0.82, opacity 0.4). Blurred cover-art
- * backdrop under a darkening gradient.
- */
+/** Now Playing — hero art + transport, with "up next" pane receded in 3D at the right edge. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NowPlayingScreen(

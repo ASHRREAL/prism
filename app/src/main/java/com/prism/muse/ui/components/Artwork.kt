@@ -57,10 +57,8 @@ private fun initialsFor(text: String): String {
 }
 
 /**
- * Procedurally-generated cover art for tracks/albums with no real artwork —
- * a layered mesh-gradient with a soft specular highlight (so it still reads as
- * dimensional under the album-art gyro tilt) and the title's initials. Fully
- * deterministic from [seed], so the same song always draws the same cover.
+ * Procedural cover art: mesh-gradient background, specular highlight, and
+ * initials. Deterministic from seed — same song = same cover.
  */
 @Composable
 fun GeneratedCover(
@@ -141,11 +139,8 @@ fun GeneratedCover(
 }
 
 /**
- * Album/track artwork. When [seed] is an http(s) URL (a real Navidrome
- * getCoverArt link) it loads via Coil; if that fails — or when there is no real
- * artwork — it renders our own [GeneratedCover] instead of the server's generic
- * placeholder. [label] (a title/artist) drives the generated cover's initials.
- * Always sharp-cornered per the aria design.
+ * Album/track artwork. Loads via Coil when an http URL; falls back to
+ * GeneratedCover when loading fails or when there's no real artwork.
  */
 @Composable
 fun Artwork(

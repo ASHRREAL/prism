@@ -59,9 +59,7 @@ fun VisualizerScreen(
     var sessionIdState by remember { mutableStateOf(viewModel.audioSessionId) }
 
     val barCount = 48
-    // Raw capture targets (written from the Visualizer callback thread) and the
-    // displayed levels, eased toward the targets every frame: fast attack, slow
-    // decay. This is what stops the bars from jumping wildly between captures.
+    // Target levels (written from Visualizer callback) eased toward each frame: fast attack, slow decay.
     val targetLevels = remember { FloatArray(barCount) }
     val levels = remember { FloatArray(barCount) }
     var hasFft by remember { mutableStateOf(false) }
@@ -79,8 +77,7 @@ fun VisualizerScreen(
         }
     }
 
-    // The Visualizer audio effect needs RECORD_AUDIO; ask when the screen opens
-    // instead of at app launch. Without it we fall back to the wave animation.
+    // RECORD_AUDIO needed for the Visualizer effect; requested on open, not at launch.
     var micGranted by remember {
         mutableStateOf(
             androidx.core.content.ContextCompat.checkSelfPermission(
@@ -113,15 +110,12 @@ fun VisualizerScreen(
                     setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
                         override fun onWaveFormDataCapture(viz: Visualizer?, bytes: ByteArray?, rate: Int) = Unit
                         override fun onFftDataCapture(viz: Visualizer?, bytes: ByteArray?, rate: Int) {
-                            // The FFT buffer is complex pairs: [dcRe, nyquistRe,
-                            // re1, im1, re2, im2, …] — treating raw bytes as
-                            // magnitudes (the old code) produced garbage jumps.
+                            // FFT buffer is complex pairs: [dcRe, nyquistRe, re1, im1, …]
                             if (bytes == null || bytes.size < 4) return
                             val bins = bytes.size / 2 - 1
                             if (bins <= 0) return
                             for (i in 0 until barCount) {
-                                // Quadratic bin mapping: more bars for the
-                                // musical low/mid range.
+                                // Quadratic bin mapping = more resolution in low/mid range.
                                 val f = i.toFloat() / (barCount - 1)
                                 val bin = (1 + (bins - 1) * f * f).toInt().coerceIn(1, bins)
                                 val re = bytes[2 * bin].toInt()
@@ -185,10 +179,7 @@ fun VisualizerScreen(
                 if (w <= 0f || h <= 0f) return@Canvas
                 val centerY = h / 2
 
-                // Symmetric spectrum: bass sits at the centre and treble radiates
-                // out to BOTH edges (mirrored left/right), each bar mirrored above
-                // and below the mid-line. Fills the whole canvas instead of a
-                // single one-sided band climbing off one edge.
+                // Bass at centre, treble mirrored to both edges, each bar mirrored top/bottom.
                 fun drawMirroredBars(
                     level: (Int) -> Float,
                     upAlpha: Float,
@@ -212,10 +203,7 @@ fun VisualizerScreen(
                     }
                 }
 
-                // "ferrofluid" mode — a gooey metallic droplet whose whole rim churns
-                // and erupts into audio-reactive spikes (sharpened with a power curve
-                // so loud bins read as needles). Filled with a flat liquid-metal
-                // gradient + a wet rim glow — no central highlight.
+                // Ferrofluid: a metallic droplet with audio-reactive rim spikes.
                 fun drawFerrofluid(
                     amp: FloatArray,
                     phase: Float,
@@ -232,11 +220,7 @@ fun VisualizerScreen(
                     val points = 256
                     val spin = phase * 0.15f
 
-                    // Radius as a function of angle: an interpolated bin sample that
-                    // wraps around the FULL circle (no left/right mirroring) so every
-                    // part of the rim reacts independently, plus three travelling
-                    // wave harmonics so the whole membrane is always churning — even
-                    // the quiet stretches drift instead of sitting still.
+                    // Interpolated bin sample + travelling wave harmonics.
                     fun radiusAt(u: Float): Float {
                         val fi = (u / twoPi) * n
                         val i0 = fi.toInt().mod(n)
@@ -290,10 +274,7 @@ fun VisualizerScreen(
                     // Real FFT data, eased at 60fps
                     when (style) {
                         "wave" -> {
-                            // Symmetric spectrum wave: bass at the centre, treble
-                            // radiating to both edges (mirrored left/right), and
-                            // reflected with equal amplitude above and below the
-                            // mid-line so it fills the whole canvas.
+                            // Bass at centre, mirrored to both edges, reflected above/below mid-line.
                             val half = w / 2f
                             fun ampAtX(x: Float): Float {
                                 val d = (abs(x - half) / half).coerceIn(0f, 1f)
@@ -362,12 +343,8 @@ fun VisualizerScreen(
                         }
                     }
                 } else if (state.isPlaying) {
-                    // Fallback: wave-based animation if no FFT (mic permission
-                    // denied or no session) — driven by the frame clock so it
-                    // stays fluid instead of stepping with the position poller.
+                    // No FFT — wave animation driven by frame clock.
                     if (style == "ferrofluid") {
-                        // Synthetic envelope so the droplet still breathes when
-                        // there's no microphone capture to drive it.
                         val synth = FloatArray(barCount)
                         val t = tick / 30f
                         for (i in 0 until barCount) {

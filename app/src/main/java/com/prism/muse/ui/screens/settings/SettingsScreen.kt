@@ -74,8 +74,7 @@ fun SettingsScreen(
 
     val server by prefs.server.collectAsState()
     val offline by prefs.offlineMode.collectAsState()
-    // A song in the mini player overlaps the bottom of the picker sheets — reserve
-    // room so the last option isn't hidden behind it.
+    // Reserve bottom padding when the mini player is visible so picker options aren't hidden.
     val miniPlayerVisible = graph.player.state.collectAsState().value.current != null
     val gapless by prefs.gapless.collectAsState()
     val replayGain by prefs.replayGain.collectAsState()

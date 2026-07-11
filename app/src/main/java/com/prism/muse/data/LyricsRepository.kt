@@ -33,14 +33,9 @@ class LyricsRepository(private val api: SubsonicClient, private val prefs: AppPr
 
         val result = withContext(Dispatchers.IO) {
             val found = if (prefs.autoFetchLyrics.value) {
-                // All providers race concurrently instead of one-after-another
-                // (serial fetching took up to ~30s of stacked timeouts). Await
-                // in priority order — synced sources first — and cancel the
-                // stragglers as soon as something usable arrives.
+                // Race all providers; cancel stragglers once we have a result.
                 coroutineScope {
-                    // Only the providers the user enabled in settings, kept in
-                    // priority order (synced sources first, text-only last). Genius
-                    // has by far the widest catalogue for niche/electronic tracks.
+                    // Only the providers the user enabled, in priority order.
                     val enabled = prefs.lyricsProviders.value
                     val providers = buildList {
                         if ("lrclib" in enabled) {
@@ -48,8 +43,7 @@ class LyricsRepository(private val api: SubsonicClient, private val prefs: AppPr
                             add(async { runCatching { lrclibSearch(song) }.getOrNull() })
                         }
                         if ("netease" in enabled) add(async { runCatching { neteaseLyrics(song) }.getOrNull() })
-                        // Server-provided lyrics (Navidrome/Subsonic getLyrics) are
-                        // always tried — you're already connected, so it's free.
+                        // Server lyrics always tried.
                         add(async { runCatching { api.getLyrics(song) }.getOrNull() })
                         if ("genius" in enabled) add(async { runCatching { geniusLyrics(song) }.getOrNull() })
                         if ("lyrics.ovh" in enabled) add(async { runCatching { lyricsOvhLyrics(song) }.getOrNull() })
@@ -72,11 +66,7 @@ class LyricsRepository(private val api: SubsonicClient, private val prefs: AppPr
         return result
     }
 
-    /**
-     * Suspending GET that actually aborts the socket on coroutine cancellation
-     * (OkHttp's blocking execute() can't be interrupted, which made cancelled
-     * lyric providers keep the fetch alive to their full timeout).
-     */
+    /** Cancellable HTTP GET — abort socket on coroutine cancellation, unlike OkHttp's blocking execute(). */
     private suspend fun httpGet(url: String, referer: String? = null): String? =
         suspendCancellableCoroutine { cont ->
             val request = Request.Builder().url(url)
@@ -107,16 +97,7 @@ class LyricsRepository(private val api: SubsonicClient, private val prefs: AppPr
     private val lrcTimeTagRegex = Regex("""\[(\d{1,2}):(\d{1,2}(?:[.:]\d{1,3})?)\]""")
     private val lrcWordTagRegex = Regex("""<\d+:\d+(?:[.:]\d+)?>""")
 
-    /**
-     * Parses an LRC blob into time-sorted lines. Handles the awkward cases that
-     * used to make the highlight stick then race:
-     *  - multiple timestamps on one line (`[t1][t2]chorus`) → one entry per time,
-     *  - `[mm:ss:xx]` colon-hundredths as well as `[mm:ss.xx]`,
-     *  - metadata tags (`[ar:…]`, `[offset:…]`) are ignored (non-numeric),
-     *  - the result is SORTED by time, so the active-line scan is monotonic.
-     * Blank/instrumental marker lines are dropped so the highlight never parks on
-     * an empty line.
-     */
+    /** Parse LRC blob → time-sorted lines. Handles multiple timestamps per line, colon-hundredths, blank lines dropped. */
     private fun parseLrc(raw: String): List<LyricLine> {
         val out = ArrayList<LyricLine>()
         for (rawLine in raw.lines()) {
@@ -199,11 +180,7 @@ class LyricsRepository(private val api: SubsonicClient, private val prefs: AppPr
         return Lyrics(lines = lines, synced = false, source = "lyrics.ovh")
     }
 
-    /**
-     * Genius — the broadest catalogue of the lot (indie/electronic tracks the
-     * other providers don't index), but plain text only (no line timing). Uses
-     * Genius's keyless public search endpoint, then scrapes the song page.
-     */
+    /** Genius — broadest catalogue, plain text only. */
     private suspend fun geniusLyrics(song: Song): Lyrics? {
         val q = java.net.URLEncoder.encode("${song.artist} ${song.title}", "UTF-8")
         val searchBody = httpGet("https://genius.com/api/search?q=$q", referer = "https://genius.com/")
@@ -226,13 +203,7 @@ class LyricsRepository(private val api: SubsonicClient, private val prefs: AppPr
         return Lyrics(lines, synced = false, source = "genius")
     }
 
-    /**
-     * Pulls the lyric text out of a Genius song page. Lyrics live inside one or
-     * more `<div data-lyrics-container="true">…</div>` blocks that can nest other
-     * divs (annotations), so we brace-match `<div>`/`</div>` to find each block's
-     * real end instead of a naive non-greedy regex. Then `<br>` → newline, strip
-     * remaining tags, decode entities.
-     */
+    /** Scrape lyric containers from a Genius song page. Brace-matches nested divs. */
     private fun extractGeniusLyrics(html: String): String? {
         val marker = "data-lyrics-container=\"true\""
         val sb = StringBuilder()

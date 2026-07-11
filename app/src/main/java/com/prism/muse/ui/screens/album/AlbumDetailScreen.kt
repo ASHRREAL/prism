@@ -43,10 +43,7 @@ import com.prism.muse.ui.theme.TextSecondary
 import com.prism.muse.ui.theme.TextTertiary
 import kotlinx.coroutines.launch
 
-/**
- * aria album page: cover beside the title block, lowercase text actions
- * (play / shuffle / download), and a flat typographic track list.
- */
+/** Album page: cover beside title block, text actions (play/shuffle/download), and a flat track list. */
 @Composable
 fun AlbumDetailScreen(
     album: Album,

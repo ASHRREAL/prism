@@ -7,11 +7,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color
 
-/**
- * Current "dynamic" accent — normally [DefaultAccent], but album/artist/now-playing
- * screens override it via [ProvideAccent] using a color derived from the artwork
- * (stand-in today for real Palette-based extraction against Navidrome art).
- */
+/** Overridable accent color — [ProvideAccent] pushes a color derived from artwork. */
 val LocalPrismAccent = compositionLocalOf { DefaultAccent }
 
 @Composable

@@ -7,11 +7,7 @@ import androidx.compose.ui.graphics.Color
 import com.prism.muse.data.model.Song
 import com.prism.muse.playback.PlaybackViewModel
 
-/**
- * A flat song row whose long-press opens the app-level [SongActions] sheet
- * (play next / add to queue / add to playlist / like / remove). The sheet is
- * rendered once at the app root, so there's no fragile per-row popup.
- */
+/** Song row with long-press → SongActions sheet (rendered once at the app root). */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SongRowWithMenu(

@@ -174,9 +174,7 @@ fun HomeHubScreen(
                             val off = (page - pagerState.currentPage) - pagerState.currentPageOffsetFraction
                             val t = off.coerceIn(0f, 1f)
                             if (depthEffect) {
-                                // Panorama recede: the peeking page to the right
-                                // rotates back into 3D (its far edge shrinks), the
-                                // same perspective as Now Playing's "up next" pane.
+                                // Peeking page recedes in 3D — same perspective as "up next" in Now Playing.
                                 transformOrigin = TransformOrigin(0f, 0.5f)
                                 cameraDistance = 16f * density
                                 rotationY = 32f * t
@@ -226,8 +224,7 @@ private fun SongsPanel(
         return
     }
     LazyColumn(contentPadding = PaddingValues(bottom = bottomPad)) {
-        // Position-qualified key: server-built lists (recently played, etc.) can
-        // contain the same song twice, and duplicate keys crash the LazyColumn.
+        // Position-qualified key because lists can contain duplicate songs.
         itemsIndexed(songs, key = { i, s -> "$i:${s.id}" }) { index, song ->
             if (viewModel != null) {
                 SongRowWithMenu(song = song, viewModel = viewModel, onClick = { onPlay(index) },

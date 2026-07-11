@@ -13,11 +13,6 @@ data class ServerConfig(
     val isConfigured: Boolean get() = url.isNotBlank() && username.isNotBlank()
 }
 
-/**
- * SharedPreferences-backed settings + Navidrome account store. Kept
- * plugin-free (no Room/DataStore) so the build stays lean; swap for encrypted
- * storage before shipping real credentials.
- */
 class AppPrefs(context: Context) {
 
     private val prefs: SharedPreferences =
@@ -50,7 +45,6 @@ class AppPrefs(context: Context) {
     private val _autoFetchLyrics = MutableStateFlow(prefs.getBoolean("auto_fetch_lyrics", true))
     val autoFetchLyrics: StateFlow<Boolean> = _autoFetchLyrics
 
-    /** Which online lyric providers the multi-source fetch is allowed to use. */
     private val _lyricsProviders = MutableStateFlow(
         prefs.getStringSet("lyrics_providers", ALL_LYRIC_PROVIDERS.toSet())?.toSet()
             ?: ALL_LYRIC_PROVIDERS.toSet()
@@ -77,15 +71,12 @@ class AppPrefs(context: Context) {
     val loudnessOn: StateFlow<Boolean> = _loudnessOn
     fun setLoudnessOn(value: Boolean) = putBool("loudness_on", value, _loudnessOn)
 
-    /** Now Playing background style: blurred, gradient, waves, solid. */
     private val _npBackground = MutableStateFlow(prefs.getString("np_background", "blurred") ?: "blurred")
     val npBackground: StateFlow<String> = _npBackground
 
-    /** Dynamic accent: derive accent color from album art. */
     private val _dynamicAccent = MutableStateFlow(prefs.getBoolean("dynamic_accent", true))
     val dynamicAccent: StateFlow<Boolean> = _dynamicAccent
 
-    /** Saved custom EQ band levels (millibels) as CSV; "" when none saved. */
     private val _customEq = MutableStateFlow(prefs.getString("custom_eq", "") ?: "")
     val customEq: StateFlow<String> = _customEq
 
@@ -137,7 +128,6 @@ class AppPrefs(context: Context) {
 
     fun setDynamicAccent(value: Boolean) = putBool("dynamic_accent", value, _dynamicAccent)
 
-    /** Which home tabs are visible; defaults to all. */
     private val _visibleTabs = MutableStateFlow(
         prefs.getStringSet("visible_tabs", ALL_TABS.toSet()) ?: setOf()
     )
@@ -148,7 +138,7 @@ class AppPrefs(context: Context) {
         _visibleTabs.value = tabs
     }
 
-    /** Home tab order (all tabs, shown or not); StringSet can't hold order. */
+    /** Tabs ordered by user preference. StringSet can't preserve order. */
     private val _tabOrder = MutableStateFlow(readTabOrder())
     val tabOrder: StateFlow<List<String>> = _tabOrder
 
@@ -164,7 +154,6 @@ class AppPrefs(context: Context) {
         return saved + ALL_TABS.filterNot { it in saved }
     }
 
-    /** Visualizer rendering style: bars, wave, ring. */
     private val _visualizerStyle = MutableStateFlow(prefs.getString("visualizer_style", "bars") ?: "bars")
     val visualizerStyle: StateFlow<String> = _visualizerStyle
 
@@ -173,7 +162,6 @@ class AppPrefs(context: Context) {
         _visualizerStyle.value = value
     }
 
-    /** Lyrics highlight style: karaoke (sweep), fade, spotlight. */
     private val _lyricsStyle = MutableStateFlow(prefs.getString("lyrics_style", "karaoke") ?: "karaoke")
     val lyricsStyle: StateFlow<String> = _lyricsStyle
 
@@ -188,8 +176,7 @@ class AppPrefs(context: Context) {
             "playlists", "favorites", "downloaded", "genres", "all songs"
         )
 
-        /** Selectable online lyric providers, in fetch-priority order (synced first).
-         *  Server-provided lyrics (Navidrome/Subsonic) are always tried separately. */
+        /** Synced sources first, then text-only. */
         val ALL_LYRIC_PROVIDERS = listOf("lrclib", "netease", "genius", "lyrics.ovh")
     }
 
@@ -199,7 +186,6 @@ class AppPrefs(context: Context) {
         _customEq.value = csv
     }
 
-    /** Saved EQ presets as name -> band-levels-CSV map. */
     private val _savedEqPresets = MutableStateFlow(readPresets())
     val savedEqPresets: StateFlow<Map<String, String>> = _savedEqPresets
 

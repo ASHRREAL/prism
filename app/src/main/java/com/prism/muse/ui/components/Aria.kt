@@ -42,10 +42,7 @@ import com.prism.muse.ui.theme.TextSecondary
 import com.prism.muse.ui.theme.TextTertiary
 import com.prism.muse.ui.theme.VoidBlack
 
-/**
- * aria screen ground: near-black, with an optional whisper of blue-black
- * light from the top corner (the Now Playing treatment in the mockup).
- */
+/** Dark background, optionally with a subtle blue-black tint from the top corner. */
 @Composable
 fun AriaBackground(
     modifier: Modifier = Modifier,
@@ -98,10 +95,7 @@ fun PagerDots(count: Int, current: Int, modifier: Modifier = Modifier) {
     }
 }
 
-/**
- * Flat aria song row: square art, condensed title over artist, hairline below.
- * The artist line turns accent-colored when [active] (the playing track).
- */
+/** Flat song row: square art, title over artist, hairline below. Artist goes accent when active. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SongRow(
@@ -150,10 +144,7 @@ fun SongRow(
     }
 }
 
-/**
- * The lowercase text-link row from the mockup ("lyrics  eq  cast") — active
- * link in accent, the rest dim.
- */
+/** Horizontal link row — active in accent, rest dim. */
 @Composable
 fun TextLinkRow(
     links: List<String>,
@@ -174,11 +165,7 @@ fun TextLinkRow(
     }
 }
 
-/**
- * aria seekbar: hairline track, accent-less white progress, round thumb,
- * elapsed time left and negative remaining right like the mockup. Drag to
- * scrub, tap to jump.
- */
+/** Seek bar: progress track, thumb, elapsed left / remaining right. Drag to scrub, tap to jump. */
 @Composable
 fun AriaSeekBar(
     position: Float,

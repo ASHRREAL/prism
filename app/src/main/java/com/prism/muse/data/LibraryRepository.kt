@@ -77,7 +77,7 @@ class LibraryRepository(
         scope.launch { if (prefs.server.value.isConfigured) refresh() }
     }
 
-    /** Full background sync of every hub section; safe to call repeatedly. */
+    /** Full sync of every hub section, safe to call repeatedly. */
     suspend fun refresh() {
         if (!prefs.server.value.isConfigured || prefs.offlineMode.value) return
         // Pull-to-refresh, login and "sync now" can all fire this; don't stack
@@ -139,12 +139,7 @@ class LibraryRepository(
         return api.getPlaylistSongs(playlistId).also { playlistSongs[playlistId] = it }
     }
 
-    /**
-     * Every song in the library. Subsonic has no "all songs" endpoint, so we
-     * walk every album (cached) and collect their tracks — this is why the old
-     * ad-hoc version (recent + favorites + first 20 albums) only ever showed a
-     * partial list.
-     */
+    /** Every song in the library. Walks cached albums, sorted alphabetically. */
     suspend fun allSongs(): List<Song> {
         if (!connectedToServer()) return emptyList()
         val out = LinkedHashMap<String, Song>()

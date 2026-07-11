@@ -42,11 +42,9 @@ private const val PREFS_LAST_INDEX = "last_song_index"
 private const val PREFS_LAST_SPEED = "last_song_speed"
 
 /**
- * The app-wide playback engine: a single ExoPlayer shared between the UI and
- * [PlaybackService]'s MediaSession (same process). Real audio when songs have
- * stream URLs; a fake position clock in demo mode so the prototype UI still
- * animates without a server. Gapless is ExoPlayer's default behavior; audio
- * focus + ducking are handled via audio attributes.
+ * App-wide playback: single ExoPlayer shared with the MediaSession.
+ * Real audio when songs have stream URLs; fake clock in demo mode so the UI
+ * still animates without a server.
  */
 class PlayerHolder(
     private val context: Context,
@@ -57,12 +55,7 @@ class PlayerHolder(
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val prefsStore = context.getSharedPreferences("aria_player", Context.MODE_PRIVATE)
 
-    /**
-     * A fixed audio session id, generated once and pinned on the player, so the
-     * DSP chain binds to a stable session for the whole process. Without this
-     * ExoPlayer's session id could change between tracks and the EQ would drop
-     * its effects (and its edits) mid-listen.
-     */
+    /** Fixed audio session ID so the DSP chain keeps its session across track changes. */
     private val stableSessionId: Int = runCatching {
         (context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager)
             .generateAudioSessionId()
@@ -100,12 +93,10 @@ class PlayerHolder(
     private var originalQueue: List<Song> = emptyList()
 
     /**
-     * Tries to restore the last playback session. Call once after construction.
-     * Returns true if a session was restored and playback has begun.
+     * Try restoring the last session. Returns true if restored.
+     * No-op if the session is already loaded or playing.
      */
     fun restoreSession(): Boolean {
-        // The activity re-runs this on every recreation (rotation, theme change);
-        // never clobber a session that is already loaded or playing.
         if (_state.value.queue.isNotEmpty()) return false
         val data = prefsStore.getString(PREFS_LAST_SONG, null) ?: return false
         val queueData = prefsStore.getString(PREFS_LAST_QUEUE, null) ?: return false
@@ -125,7 +116,7 @@ class PlayerHolder(
         }
     }
 
-    /** Saves the current playback state to SharedPreferences. */
+    /** Saves playback position, queue, and current song. */
     private fun saveSession() {
         val s = _state.value
         if (s.queue.isEmpty()) return
@@ -229,9 +220,7 @@ class PlayerHolder(
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                // A dead stream (bad URL, server down mid-queue) must not end the
-                // session silently: skip to the next track when there is one,
-                // otherwise stop cleanly and reflect that in the UI state.
+                // Skip dead streams — next track when available, stop otherwise.
                 if (demoMode) return
                 if (player.hasNextMediaItem()) {
                     player.seekToNextMediaItem()
@@ -266,11 +255,7 @@ class PlayerHolder(
         }
     }
 
-    /**
-     * Ticks at 10Hz while playing: crossfade (a volume ramp over the last and
-     * first N seconds of each track — a real dual-player overlap isn't possible
-     * with a single ExoPlayer) and ReplayGain track-gain attenuation.
-     */
+    /** Crossfade volume ramp + ReplayGain attenuation. Single-player fade, not true dual-player overlap. */
     private fun applyVolumeAutomation() {
         val song = _state.value.current ?: return
         var vol = 1f
@@ -292,14 +277,7 @@ class PlayerHolder(
         runCatching { player.volume = vol.coerceIn(0f, 1f) }
     }
 
-    /**
-     * End-of-lap reshuffle for repeat-ALL + shuffle: rebuild the queue in a fresh
-     * random order (retried a few times so it differs from the lap that just
-     * played) and restart playback from slot 0. Because we play a physically
-     * shuffled list with `shuffleModeEnabled` off, each lap runs sequentially and
-     * the order visibly changes between repeats. Safe here because the previous
-     * item just ended — there's no in-progress playback to interrupt.
-     */
+    /** Repeat-all + shuffle: reshuffle the whole queue and restart from zero. */
     private fun reshuffleOnReplay() {
         val s = _state.value
         if (s.queue.size <= 1) {
@@ -398,18 +376,9 @@ class PlayerHolder(
     }
 
     /**
-     * Shuffle toggles by *physically* reordering the queue, not by flipping
-     * ExoPlayer's `shuffleModeEnabled`. ExoPlayer's internal shuffle keeps the
-     * media-item list in its original order and plays it in an opaque random
-     * sequence — so `player.currentMediaItemIndex` (which we mirror into
-     * `currentIndex`) jumped to seemingly random rows and the visible queue never
-     * matched what actually played next.
-     *
-     * Toggling shuffle now does NOT touch the current queue at all — the song you
-     * are on keeps playing in the exact order it is in. Shuffle is purely a flag
-     * that says "rebuild the queue in a fresh random order the next time repeat-all
-     * loops it" (see [reshuffleOnReplay]). So pressing shuffle mid-song is a no-op
-     * to the ear; the reshuffle only happens when the queue wraps.
+     * Shuffle is just a flag — the queue isn't reordered until the next repeat-all
+     * wrap. ExoPlayer's internal shuffle mode isn't used because it makes the visible
+     * queue index jump around.
      */
     fun toggleShuffle() {
         val shuffle = !_state.value.shuffle
@@ -428,14 +397,7 @@ class PlayerHolder(
         applyRepeatMode()
     }
 
-    /**
-     * Maps the app's repeat mode to ExoPlayer's repeat mode. Repeat-ALL with
-     * shuffle on runs as REPEAT_MODE_OFF on purpose: we want the STATE_ENDED
-     * signal at the end of each lap so we can reshuffle the whole queue into a
-     * *new* order before restarting (see [reshuffleOnReplay]) — that's what makes
-     * each repeat play the songs in a different order. Repeat-ALL without shuffle
-     * just loops the fixed order via REPEAT_MODE_ALL.
-     */
+    /** Repeat-all with shuffle runs as REPEAT_MODE_OFF so STATE_ENDED fires at the end of each lap for reshuffling. */
     private fun applyRepeatMode() {
         val s = _state.value
         player.repeatMode = when {
@@ -470,14 +432,7 @@ class PlayerHolder(
         if (!demoMode) player.addMediaItem(toMediaItem(song))
     }
 
-    /**
-     * Shuffle only the *upcoming* tracks, leaving the current song (and anything
-     * already played) exactly where it is. Crucially this reorders the media items
-     * AFTER the current one via remove/add instead of setMediaItems — replacing the
-     * whole list forced ExoPlayer to re-load the current item, which is why the
-     * song briefly stopped when you tapped shuffle. The playing item is never
-     * touched, so playback continues seamlessly.
-     */
+    /** Shuffle upcoming tracks only; the current song keeps playing. Uses remove/add instead of setMediaItems. */
     fun shuffleQueue() {
         val s = _state.value
         val curIdx = s.currentIndex
@@ -576,12 +531,8 @@ class PlayerHolder(
             .build()
 
     private fun startService() {
-        // Plain startService, NOT startForegroundService: the latter demands
-        // startForeground() within 5s, but media3 only promotes the service once
-        // playback is actually active — a slow stream start or a broken URL then
-        // kills the whole app (ForegroundServiceDidNotStartInTimeException).
-        // This is always called from the foreground (a user tap), where plain
-        // startService is allowed; media3 handles the foreground promotion.
+        // Plain startService, not startForegroundService — media3 handles the
+        // foreground promotion itself once playback is active.
         runCatching {
             context.startService(Intent(context, PlaybackService::class.java))
         }

@@ -18,12 +18,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/**
- * Tilts the composable in 3D by sampling the accelerometer, giving album art
- * and floating cards the subtle "looking into glass" depth called for by the
- * reference UI. Falls back to a static, untilted layer on devices/emulators
- * without a usable sensor.
- */
+/** Tilts in 3D by sampling the accelerometer. Falls back to a static layer without a sensor. */
 @Composable
 fun Modifier.gyroTilt(maxDegrees: Float = 6f, perspective: Float = 0.0016f): Modifier {
     val context = LocalContext.current

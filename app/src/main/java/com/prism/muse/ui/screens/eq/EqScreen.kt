@@ -67,9 +67,7 @@ fun EqScreen(
     val prefs = graph.prefs
     var eqEnabled by remember { mutableStateOf(prefs.eqEnabled.value) }
 
-    // The DSP chain is owned by the player (app-scoped, stable session), so it
-    // survives navigation and keeps applying during playback. `revision` bumps
-    // whenever it (re)binds, so the metadata/band snapshots below rebuild then.
+    // DSP chain lives on the player (app-scoped), so it keeps applying during playback across navigation.
     val effects = graph.player.audioEffects
     val revision by effects.revision.collectAsState()
     LaunchedEffect(Unit) { effects.attach(graph.player.audioSessionId) }
@@ -220,9 +218,7 @@ fun EqScreen(
                 }
             }
 
-            // Reading band/preset metadata can itself throw on flaky audio HALs;
-            // gather it once behind runCatching and bail out to the placeholder
-            // text rather than crashing the screen.
+            // Gather band/preset metadata behind runCatching — audio HALs can throw.
             val eqInfo = remember(revision) {
                 val eq0 = effects.eq ?: return@remember null
                 runCatching {

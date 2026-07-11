@@ -69,13 +69,7 @@ class MainActivity : ComponentActivity() {
 
     private val playbackViewModel: PlaybackViewModel by viewModels()
 
-    /**
-     * Connecting a MediaController binds and starts [PlaybackService], which is
-     * what registers the MediaSession with the system — without it the session
-     * only comes alive if the manual startService() call raced correctly, and
-     * the phone's media controls never learned about us. The controller itself
-     * is unused; the UI keeps talking to the shared ExoPlayer directly.
-     */
+    // Must bind a MediaController to get the MediaSession registered with the system.
     private var controllerFuture:
         com.google.common.util.concurrent.ListenableFuture<androidx.media3.session.MediaController>? = null
 
@@ -99,9 +93,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        // Notification permission so the media-controls notification can show on
-        // Android 13+. RECORD_AUDIO is only needed by the visualizer, which asks
-        // for it itself when opened — requesting the mic at launch scares users.
+        // POST_NOTIFICATIONS is needed on 13+ for the media controls notification.
+        // RECORD_AUDIO is only requested by the visualizer, not at launch.
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
             checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -182,9 +175,8 @@ private fun PrismApp(playbackViewModel: PlaybackViewModel) {
         }
     }
 
-    // Fill the whole window (incl. behind the status/nav bars) with the app
-    // background; each screen applies its own status/nav insets. This stops the
-    // strip behind the gesture pill from showing the default window colour.
+    // Fill the whole window with the app background so the gesture-pill strip
+    // doesn't show the default window colour through.
     Box(Modifier.fillMaxSize().background(VoidBlack)) {
         PrismNavHost(
             navController = navController,
@@ -218,11 +210,9 @@ private fun PrismApp(playbackViewModel: PlaybackViewModel) {
             }
         )
 
-        // Overlays (now playing, lyrics, settings, album/playlist lists …) render
-        // ON TOP of the nav content, so a back press must close the top overlay
-        // first. This handler is composed AFTER the NavHost, so while an overlay is
-        // open it out-ranks the NavHost's own back callback — otherwise back popped
-        // the album/screen underneath before closing the overlay.
+        // Overlays render on top of the nav content. This back handler is after the
+        // NavHost, so while an overlay is open it out-ranks the NavHost's own back
+        // callback — otherwise back popped the screen underneath first.
         BackHandler(enabled = overlayOpen) {
             when {
                 queueOpen -> queueOpen = false
@@ -417,11 +407,8 @@ private fun PlaylistActionsHost() {
 }
 
 /**
- * Wraps a full-screen overlay so it fully absorbs touches: a transparent
- * catcher sits *behind* the overlay's own content and consumes any pointer
- * events the content didn't handle. Without this, taps/drags on the overlay's
- * empty areas fell through to whatever screen was underneath (e.g. swiping down
- * in Lyrics was reaching Now Playing's collapse gesture).
+ * Absorbs pointer events so taps/drags on the overlay's empty areas don't
+ * fall through to the screen underneath.
  */
 @Composable
 private fun GestureLayer(content: @Composable () -> Unit) {
