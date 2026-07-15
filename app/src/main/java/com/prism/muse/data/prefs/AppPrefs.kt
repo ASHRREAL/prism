@@ -173,7 +173,7 @@ class AppPrefs(context: Context) {
     companion object {
         val ALL_TABS = listOf(
             "recommended", "recently played", "albums", "artists",
-            "playlists", "favorites", "downloaded", "genres", "all songs"
+            "playlists", "genres", "library"
         )
 
         /** Synced sources first, then text-only. */

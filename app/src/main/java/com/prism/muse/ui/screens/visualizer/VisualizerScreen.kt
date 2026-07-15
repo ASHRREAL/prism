@@ -62,7 +62,6 @@ fun VisualizerScreen(
     // Target levels (written from Visualizer callback) eased toward each frame: fast attack, slow decay.
     val targetLevels = remember { FloatArray(barCount) }
     val levels = remember { FloatArray(barCount) }
-    var hasFft by remember { mutableStateOf(false) }
     var frameTick by remember { mutableStateOf(0L) }
 
     LaunchedEffect(Unit) {
@@ -98,6 +97,11 @@ fun VisualizerScreen(
             if (id != 0 && id != sessionIdState) {
                 sessionIdState = id
             }
+            // Pick up a grant made from the system settings screen without reopening.
+            val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.RECORD_AUDIO
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (granted != micGranted) micGranted = granted
             kotlinx.coroutines.delay(500)
         }
     }
@@ -124,7 +128,6 @@ fun VisualizerScreen(
                                 targetLevels[i] =
                                     (kotlin.math.ln(1f + mag * 6f) / kotlin.math.ln(7f)).coerceIn(0f, 1f)
                             }
-                            hasFft = true
                         }
                     }, Visualizer.getMaxCaptureRate(), false, true)
                     enabled = true
@@ -167,6 +170,34 @@ fun VisualizerScreen(
             }
             Text("visualizer", style = HubTitle.copy(fontSize = 48.sp, lineHeight = 52.sp), color = TextPrimary,
                 modifier = Modifier.padding(start = 22.dp, top = 2.dp, bottom = 6.dp))
+
+            if (!micGranted) {
+                // Visualizer capture needs RECORD_AUDIO; without it only the synthetic
+                // animation runs. Tap re-requests, or falls back to app settings if the
+                // system will no longer show the dialog.
+                Text(
+                    "tap to allow microphone — needed to react to audio ›",
+                    style = MaterialTheme.typography.bodyMedium, color = accent,
+                    modifier = Modifier
+                        .padding(start = 22.dp, end = 22.dp, bottom = 6.dp)
+                        .clickable {
+                            val activity = context as? android.app.Activity
+                            val canAsk = activity?.shouldShowRequestPermissionRationale(
+                                android.Manifest.permission.RECORD_AUDIO
+                            ) ?: true
+                            if (canAsk) {
+                                permissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                            } else {
+                                context.startActivity(
+                                    android.content.Intent(
+                                        android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                        android.net.Uri.fromParts("package", context.packageName, null)
+                                    )
+                                )
+                            }
+                        }
+                )
+            }
 
             Canvas(
                 modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = 22.dp, vertical = 16.dp)
@@ -270,7 +301,11 @@ fun VisualizerScreen(
                     )
                 }
 
-                if (hasFft && state.isPlaying) {
+                // Real capture present when the eased levels carry energy. Reading levels[]
+                // (frame-driven via tick) instead of a Compose flag set on the native capture
+                // thread avoids cross-thread state-visibility gaps that stuck this on synth.
+                val hasFft = levels.any { it > 0.02f }
+                if (hasFft) {
                     // Real FFT data, eased at 60fps
                     when (style) {
                         "wave" -> {

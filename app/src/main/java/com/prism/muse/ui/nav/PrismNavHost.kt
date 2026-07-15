@@ -55,7 +55,8 @@ fun PrismNavHost(
     onOpenSettings: () -> Unit,
     onOpenPlaylist: (Playlist) -> Unit = {},
     onOpenGenre: (String) -> Unit = {},
-    onOpenAllSongs: () -> Unit = {}
+    onOpenAllSongs: () -> Unit = {},
+    onOpenSongs: (String, List<com.prism.muse.data.model.Song>) -> Unit = { _, _ -> }
 ) {
     NavHost(
         navController = navController,
@@ -73,6 +74,7 @@ fun PrismNavHost(
                 onOpenNowPlaying = onOpenNowPlaying,
                 onGenreClick = onOpenGenre,
                 onOpenAllSongs = onOpenAllSongs,
+                onOpenSongs = onOpenSongs,
                 onSearchClick = { navController.navigate(Routes.SEARCH) },
                 onSettingsClick = onOpenSettings,
                 viewModel = playbackViewModel,

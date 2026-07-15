@@ -89,6 +89,7 @@ fun HomeHubScreen(
     onSearchClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onOpenAllSongs: () -> Unit = {},
+    onOpenSongs: (String, List<Song>) -> Unit = { _, _ -> },
     viewModel: com.prism.muse.playback.PlaybackViewModel? = null,
     contentPadding: PaddingValues = PaddingValues()
 ) {
@@ -200,10 +201,8 @@ fun HomeHubScreen(
                         "albums" -> AlbumsPanel(albums, onAlbumClick, bottomPad)
                         "artists" -> ArtistsPanel(artists, onArtistClick, bottomPad)
                         "playlists" -> PlaylistsPanel(playlists, onPlaylistClick, bottomPad)
-                        "favorites" -> SongsPanel(favorites, playback.current?.id, accent, bottomPad, viewModel) { i -> playSongs(favorites, i) }
-                        "downloaded" -> DownloadsPanel(downloaded, library.downloadProgress.collectAsState().value, accent, bottomPad, viewModel) { i -> playSongs(downloaded, i) }
                         "genres" -> GenresPanel(genres.map { it.name to it.albumCount }, onGenreClick, bottomPad)
-                        "all songs" -> AllSongsPanel(accent, bottomPad, onOpenAllSongs)
+                        "library" -> LibraryPanel(favorites, downloaded, bottomPad, onOpenAllSongs, onOpenSongs)
                     }
                 }
             }
@@ -310,73 +309,35 @@ private fun GenresPanel(genres: List<Pair<String, Int>>, onGenreClick: (String) 
     }
 }
 
+/** Combined library menu: all songs / favorites / downloads, each opening a full song list. */
 @Composable
-private fun DownloadsPanel(
+private fun LibraryPanel(
+    favorites: List<Song>,
     downloaded: List<Song>,
-    progress: Map<String, com.prism.muse.data.DownloadProgress>,
-    accent: Color,
     bottomPad: Dp,
-    viewModel: com.prism.muse.playback.PlaybackViewModel?,
-    onPlay: (Int) -> Unit
+    onOpenAllSongs: () -> Unit,
+    onOpenSongs: (String, List<Song>) -> Unit
 ) {
-    val context = LocalContext.current
     LazyColumn(contentPadding = PaddingValues(bottom = bottomPad)) {
-        // Show active downloads
-        val active = progress.values.filter { !it.done }
-        if (active.isNotEmpty()) {
-            item {
-                Text("downloading", style = MaterialTheme.typography.bodyMedium, color = TextTertiary,
-                    modifier = Modifier.padding(bottom = 8.dp))
-            }
-            items(active.toList(), key = { it.songId }) { p ->
-                Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically) {
-                        Text(p.songTitle, style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp),
-                            color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f))
-                        Text("${p.progressPercent}%", style = MaterialTheme.typography.bodyMedium,
-                            color = accent)
-                        Text("cancel", style = MaterialTheme.typography.bodyMedium, color = TextTertiary,
-                            modifier = Modifier.clickable {
-                                PrismApp.graph(context).library.cancelDownload(p.songId)
-                            }.padding(start = 12.dp))
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    LinearProgressIndicator(
-                        progress = { p.progressPercent / 100f },
-                        modifier = Modifier.fillMaxWidth().height(3.dp),
-                        color = accent,
-                        trackColor = accent.copy(alpha = 0.15f)
-                    )
-                }
-            }
-            item { HairlineDivider(Modifier.padding(vertical = 8.dp)) }
-        }
-
-        // Show completed downloads
-        if (downloaded.isEmpty() && active.isEmpty()) {
-            item { Text("no downloads yet", style = MaterialTheme.typography.bodyLarge, color = TextTertiary) }
-        } else {
-            itemsIndexed(downloaded, key = { _, s -> s.id }) { index, song ->
-                if (viewModel != null) {
-                    SongRowWithMenu(song = song, viewModel = viewModel,
-                        onClick = { onPlay(index) },
-                        active = false, accent = accent)
-                } else {
-                    SongRow(song = song, onClick = { onPlay(index) },
-                        active = false, accent = accent)
-                }
-            }
-        }
+        item { LibraryEntry("all songs", null, onOpenAllSongs) }
+        item { LibraryEntry("favorites", favorites.size) { onOpenSongs("favorites", favorites) } }
+        item { LibraryEntry("downloads", downloaded.size) { onOpenSongs("downloads", downloaded) } }
     }
 }
 
 @Composable
-private fun AllSongsPanel(accent: Color, bottomPad: Dp, onOpenAllSongs: () -> Unit) {
-    Column(Modifier.fillMaxWidth()) {
-        Text("Your complete library at a glance.", style = MaterialTheme.typography.bodyLarge, color = TextTertiary, modifier = Modifier.padding(bottom = 14.dp))
-        Text("open all songs ›", style = MaterialTheme.typography.bodyLarge, color = accent, modifier = Modifier.padding(bottom = 10.dp).clickable(onClick = onOpenAllSongs))
-        Text("browse and play any track from every album, artist, and playlist.", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+private fun LibraryEntry(name: String, count: Int?, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 16.dp),
+        verticalAlignment = Alignment.Bottom
+    ) {
+        Text(name, style = MetroListEntry.copy(fontSize = 32.sp), color = TextPrimary, maxLines = 1,
+            overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+        if (count != null) {
+            Spacer(Modifier.size(12.dp))
+            Text("$count", style = MaterialTheme.typography.bodyLarge, color = TextTertiary,
+                modifier = Modifier.padding(bottom = 4.dp))
+        }
     }
+    HairlineDivider()
 }

@@ -183,12 +183,24 @@ fun QueueScreen(viewModel: PlaybackViewModel, onBack: () -> Unit) {
                             played = false, onClick = { viewModel.playAt(realIdx) }
                         )
                     } else {
-                        val dismiss = rememberSwipeToDismissBoxState(confirmValueChange = { v ->
-                            if (v == SwipeToDismissBoxValue.EndToStart) {
-                                if (realIdx >= 0 && realIdx < queueKeys.size) queueKeys.removeAt(realIdx)
-                                viewModel.removeFromQueue(song); queueList.removeAt(realIdx); true
-                            } else false
-                        })
+                        // This row's own stable key, snapshotted by value. The drag handle's
+                        // pointerInput(Unit) never restarts, so the onDragStart it captured keeps
+                        // reading the *original* realIdx — which points at a different row after any
+                        // reorder. The key is invariant for this row, so snapshotting it here lets
+                        // onDragStart always pick the row the user actually grabbed.
+                        val slotKey = queueKeys[realIdx]
+                        // Keyed by song identity: after a removal the slot's stable key is reused
+                        // by the song shifting up into it. Without this key() that song inherits
+                        // the dismissed state (looks hidden) and a stale confirm closure; keying
+                        // gives it a fresh, settled state bound to the right song.
+                        val dismiss = androidx.compose.runtime.key(song.id) {
+                            rememberSwipeToDismissBoxState(confirmValueChange = { v ->
+                                if (v == SwipeToDismissBoxValue.EndToStart) {
+                                    if (realIdx >= 0 && realIdx < queueKeys.size) queueKeys.removeAt(realIdx)
+                                    viewModel.removeFromQueue(song); queueList.removeAt(realIdx); true
+                                } else false
+                            })
+                        }
                         SwipeToDismissBox(state = dismiss, enableDismissFromStartToEnd = false,
                             backgroundContent = {
                                 val bg by animateColorAsState(
@@ -208,7 +220,7 @@ fun QueueScreen(viewModel: PlaybackViewModel, onBack: () -> Unit) {
                                     dragOffset = if (isDragging) dragAccumY else 0f,
                                     onDragStart = {
                                         draggedId = song.id
-                                        draggedSlotKey = queueKeys[realIdx]
+                                        draggedSlotKey = slotKey
                                         dragAccumY = 0f
                                     },
                                     onDrag = { dy ->
@@ -227,7 +239,7 @@ fun QueueScreen(viewModel: PlaybackViewModel, onBack: () -> Unit) {
                                             }
                                         }
                                     },
-                                    onDragEnd = { draggedId = null; dragAccumY = 0f }
+                                    onDragEnd = { draggedId = null; draggedSlotKey = -1; dragAccumY = 0f }
                                 )
                             }
                         }

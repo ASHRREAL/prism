@@ -1,5 +1,6 @@
 package com.prism.muse.ui.components
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -80,6 +81,9 @@ fun SongActionsHost(viewModel: PlaybackViewModel) {
     val scope = rememberCoroutineScope()
     val favorites by graph.library.favorites.collectAsState()
     val playlists by graph.library.playlists.collectAsState()
+
+    // Registered last (host renders after nav + overlays) so it out-ranks their back handlers.
+    BackHandler(enabled = visible) { SongActions.close() }
 
     Box(Modifier.fillMaxSize()) {
         // Scrim

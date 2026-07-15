@@ -24,8 +24,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -36,6 +39,7 @@ import com.prism.muse.data.navidrome.SubsonicClient
 import com.prism.muse.ui.components.AriaBackground
 import com.prism.muse.ui.components.Artwork
 import com.prism.muse.ui.components.HairlineDivider
+import com.prism.muse.ui.components.SongActions
 import com.prism.muse.ui.components.SongRow
 import com.prism.muse.ui.theme.HubTitle
 import com.prism.muse.ui.theme.LocalPrismAccent
@@ -56,10 +60,18 @@ fun SearchScreen(
 ) {
     val graph = PrismApp.graph(LocalContext.current)
     val accent = LocalPrismAccent.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focusRequester = remember { FocusRequester() }
 
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<SubsonicClient.SearchResults?>(null) }
     var searching by remember { mutableStateOf(false) }
+
+    // Open straight into the field with the keyboard up.
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+        keyboard?.show()
+    }
 
     LaunchedEffect(query) {
         if (query.isBlank()) {
@@ -99,7 +111,7 @@ fun SearchScreen(
                     unfocusedTextColor = TextPrimary,
                     cursorColor = accent
                 ),
-                modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp).focusRequester(focusRequester)
             )
             HairlineDivider()
 
@@ -125,6 +137,7 @@ fun SearchScreen(
                                     graph.player.setQueue(r.songs, index)
                                     onOpenNowPlaying()
                                 },
+                                onLongClick = { keyboard?.hide(); SongActions.open(song) },
                                 accent = accent
                             )
                         }

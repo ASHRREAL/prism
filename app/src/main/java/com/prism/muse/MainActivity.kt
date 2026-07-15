@@ -207,6 +207,11 @@ private fun PrismApp(playbackViewModel: PlaybackViewModel) {
                     songListOpen = true
                     songListSongs = runCatching { graph.library.allSongs() }.getOrDefault(emptyList())
                 }
+            },
+            onOpenSongs = { title, songs ->
+                songListTitle = title
+                songListSongs = songs
+                songListOpen = true
             }
         )
 
